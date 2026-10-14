@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Result{% endblock %}
+{% block content %}
+{% if is_history %}
+<div class="result-back-bar">
+  <button class="action-button" type="button" onclick="window.location.href='{{ back_url or url_for('history') }}'">{{ back_label or 'Back to History' }}</button>
+</div>
+{% endif %}
+<section class="card">
+  <h1>Result Report</h1>
+  <div class="result-verdict {{ 'pass' if overall_pass else 'fail' }}" role="status" aria-live="polite">
+    {% if not overall_pass %}
+      <div class="failed-sections-summary">
+        <span>Failed section{% if section_reports|selectattr('passed', 'equalto', false)|list|length > 1 %}s{% endif %}:</span>
+        {% for report in section_reports if not report.passed %}
+          <strong>{{ report.title }}</strong>{% if not loop.last %}<span>, </span>{% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+    <span class="result-verdict-score result-verdict-marks"><span class="score-box">Marks: {{ overall_correct }} / {{ overall_total }}</span></span>
+    <span class="result-verdict-label">{{ 'PASS' if overall_pass else 'FAIL' }}</span>
+    <span class="result-verdict-score result-verdict-percentage"><span class="score-box">Percentage: {{ overall }}%</span></span>
+  </div>
+  <p><strong>Name:</strong> {{ attempt.student.name }}</p>
+  <p><strong>Roll number:</strong> {{ attempt.student.roll_no }}</p>
+  <p><strong>Test:</strong> {{ attempt.test.title if attempt.test else 'Test' }}</p>
+  <p><strong>Date and time:</strong> {{ attempt.started_at|to_pkdt|strftime('%d %b %Y, %I:%M:%S %p') }}</p>
+  <p><strong>History:</strong> {{ 'Saved' if attempt.save_history else 'Not saved' }}</p>
+  <p><strong>Pass requirement:</strong> The complete test uses {{ pass_percentage }}% overall.</p>
+  <p><strong>Reason:</strong> {{ attempt.stopped_reason or 'Completed' }}</p>
+
+  <table>
+    <thead><tr><th>Section</th><th>Answered</th><th>Correct</th><th>Total</th><th>Percentage</th><th>Pass mark</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for r in section_reports %}
+      <tr class="{{ 'section-result-pass' if r.passed else 'section-result-fail' }}">
+        <td>{{ r.title }}</td>
+        <td>{{ r.answered }}</td>
+        <td>{{ r.correct }}</td>
+        <td>{{ r.total }}</td>
+        <td>{{ r.percentage }}%</td>
+        <td>{{ r.pass_percentage }}%</td>
+        <td class="{{ 'result-cell-pass' if r.passed else 'result-cell-fail' }}">
+          {% if r.timed_out %}<span class="result-status expired">TIME EXPIRED</span>{% elif r.passed %}<span class="result-status pass">PASS</span>{% else %}<span class="result-status fail">FAIL</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="review-heading">Answer review</h2>
+  {% for r in section_reports %}
+  <section class="review-section {{ 'review-section-fail' if not r.passed else '' }}">
+    <h3>{{ r.title }}{% if not r.passed %} <span class="section-failed-label">FAILED SECTION</span>{% endif %}</h3>
+    <table class="review-table">
+      <thead><tr><th>#</th><th>Question</th><th>Your answer</th><th>Correct answer</th><th>Result</th></tr></thead>
+      <tbody>
+        {% for q in r.review %}
+        <tr class="{{ 'review-correct' if q.is_correct else 'review-wrong' }}">
+          <td>{{ loop.index }}</td>
+          <td>{{ q.text }}</td>
+          <td>{% if q.selected_option %}{{ q.selected_option }}. {{ q.selected_text }}{% else %}Not answered{% endif %}</td>
+          <td>{{ q.correct_option }}. {{ q.correct_text }}</td>
+          <td class="review-result">{% if q.is_correct %}<span class="result-status pass">CORRECT</span>{% else %}<span class="result-status fail">WRONG</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+
+  {% if is_history %}
+  <div class="report-actions">
+    <button class="action-button" type="button" onclick="window.location.href='{{ url_for('download_attempt_word', attempt_id=attempt.id) }}'">Download Word file</button>
+    <button type="button" onclick="window.print()">Print report</button>
+  </div>
+  {% else %}
+  <a class="button-link" href="{{ url_for('restart') }}">Start a new attempt</a>
+  {% endif %}
+</section>
+{% endblock %}

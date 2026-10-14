@@ -1,0 +1,60 @@
+<section class="history-analytics" aria-label="Student test progress">
+  <div class="history-progress-panel">
+    <h3>{{ progress_student.name }} · Test progress</h3>
+    <div class="history-chart-scroll">
+      <svg class="history-progress-chart" viewBox="0 0 {{ chart_width }} {{ chart_height }}" role="img" aria-label="Test percentages by date">
+        <text class="chart-axis-title" x="15" y="{{ chart_mid_y }}" transform="rotate(-90 15 {{ chart_mid_y }})">Percentage</text>
+        {% for tick in chart_ticks %}
+        <line class="chart-grid-line{{ '' if tick.major else ' chart-grid-line-minor' }}" x1="60" y1="{{ tick.y }}" x2="{{ chart_width - 18 }}" y2="{{ tick.y }}"></line>
+        <text class="chart-tick-label" x="53" y="{{ tick.y + 4 }}" text-anchor="end">{{ tick.value }}%</text>
+        {% endfor %}
+        <polyline class="history-progress-line" points="{{ progress_line }}"></polyline>
+        {% for point in progress_points %}
+        <g class="chart-hover-group chart-attempt-point" data-attempt-id="{{ point.attempt_id }}" onclick="focusAttempt(this)" onmouseleave="this.classList.remove('suppress-hover')">
+          <circle class="history-progress-point" cx="{{ point.x }}" cy="{{ point.y }}" r="4"></circle>
+          <circle class="chart-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="12"></circle>
+          <text class="chart-date-label" x="{{ point.x }}" y="{{ chart_height - 30 }}" text-anchor="middle">{{ point.date_label }}</text>
+          <g class="chart-tooltip"><rect x="{{ point.tip.x }}" y="{{ point.tip.y }}" width="{{ point.tip.width }}" height="{{ point.tip.height }}" rx="5"></rect>{% for line in point.tip.lines %}<text x="{{ point.tip.text_x }}" y="{{ line.y }}" text-anchor="middle">{{ line.text }}</text>{% endfor %}</g>
+        </g>
+        {% endfor %}
+        <text class="chart-axis-title" x="{{ chart_width / 2 }}" y="{{ chart_height - 5 }}" text-anchor="middle">Test date</text>
+      </svg>
+    </div>
+  </div>
+  <div class="history-average-panel">
+    <h3>Average score</h3>
+    <div class="history-average-donut" style="--average: {{ average_percentage }}%;">
+      <span>{{ average_percentage }}%</span>
+    </div>
+    <p>Across {{ progress_total_tests }} test{{ '' if progress_total_tests == 1 else 's' }}</p>
+  </div>
+  <div class="history-average-panel">
+    <h3>Passing rate</h3>
+    <div class="history-average-donut" style="--average: {{ passed_percentage }}%;">
+      <span>{{ passed_percentage }}%</span>
+    </div>
+    <p>Tests passed</p>
+    <div class="history-pass-count"><strong>{{ passed_attempts }} / {{ progress_total_tests }}</strong><span>Tests passed / total</span></div>
+  </div>
+</section>
+<script>
+  function clearAttemptFocus() {
+    document.querySelectorAll('.chart-attempt-point.is-selected').forEach(function (p) { p.classList.remove('is-selected'); });
+    document.querySelectorAll('.attempt-highlight').forEach(function (el) { el.classList.remove('attempt-highlight'); });
+  }
+  function focusAttempt(point) {
+    var wasSelected = point.classList.contains('is-selected');
+    clearAttemptFocus();
+    if (wasSelected) { point.classList.add('suppress-hover'); return; }
+    var id = point.dataset.attemptId;
+    var target = document.getElementById('attempt-card-' + id) || document.querySelector('tr[data-attempt-id="' + id + '"]');
+    if (!target) { return; }
+    point.classList.add('is-selected');
+    target.classList.add('attempt-highlight');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  document.addEventListener('click', function (event) {
+    if (event.target.closest && event.target.closest('.chart-attempt-point')) { return; }
+    clearAttemptFocus();
+  });
+</script>

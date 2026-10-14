@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<h1>Admin Dashboard</h1>
+
+<div class="admin-quick-actions">
+  <a class="button-link" href="{{ url_for('history') }}">History</a>
+  <a class="button-link" href="{{ url_for('admin_password_change_page') }}">Change Password</a>
+  <a class="button-link" href="{{ url_for('admin_student_registrations') }}">Registration</a>
+</div>
+
+<section class="card test-manager">
+  <div class="row between centre">
+    <div>
+      <h2>Saved tests</h2>
+      <p class="muted">Open a test to edit its sections, questions, and imports.</p>
+    </div>
+    <form method="post" action="{{ url_for('add_test') }}" class="inline-form">
+      <input name="title" placeholder="New test name" required maxlength="200">
+      <button type="submit">Create test</button>
+    </form>
+  </div>
+  {% if tests %}
+  <div class="test-stack">
+    {% for test in tests %}
+    <div class="test-stack-item {{ 'selected-test' if selected_test and test.id == selected_test.id else '' }}">
+      <div>
+        <strong>{{ test.title }}</strong>
+        <span class="muted">{{ test.sections|length }} section{{ '' if test.sections|length == 1 else 's' }}</span>
+        {% set test_question_total = namespace(value=0) %}
+        {% for section in test.sections %}
+          {% set test_question_total.value = test_question_total.value + section.questions|length %}
+        {% endfor %}
+        {% set test_marks = test_mark_summaries[test.id] %}
+        <span class="muted">{{ test_totals[test.id] // 60 }} min {{ test_totals[test.id] % 60 }} sec · {{ test_question_total.value }} questions · Total marks: {{ test_marks.total_marks }} · Passing: {{ test_marks.passing_marks }} marks · Overall pass: {{ test.pass_percentage|round(2) }}%</span>
+        {% if selected_test and test.id == selected_test.id %}
+        <form method="post" action="{{ url_for('update_test', test_id=test.id) }}" class="inline-form test-settings-form">
+          <input name="title" value="{{ test.title }}" required maxlength="200">
+          <label>Overall passing %<input type="number" name="pass_percentage" value="{{ test.pass_percentage }}" min="0" max="100" step="0.000001" required></label>
+          <span class="muted">Applies to all sections</span>
+          <button class="small" type="submit">Save test settings</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="question-actions">
+        {% if not selected_test or test.id != selected_test.id %}
+        <a class="action-button" href="{{ url_for('admin_dashboard', test_id=test.id) }}">Open test</a>
+        {% endif %}
+        <form method="post" action="{{ url_for('delete_test', test_id=test.id) }}" onsubmit="return confirm('Delete this test, all sections, questions and its attempts?')">
+          <button class="danger small" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <p>No tests yet. Create a test before importing questions.</p>
+  {% endif %}
+</section>
+
+<div id="selected-test-content">
+{% if selected_test %}
+<div class="selected-test-heading row between centre">
+  <h2>Opened test: {{ selected_test.title }} <span class="muted">({{ selected_test_total_seconds // 60 }} min {{ selected_test_total_seconds % 60 }} sec total)</span></h2>
+  <div class="question-actions">
+    <form method="post" action="{{ url_for('delete_all_sections') }}" onsubmit="return confirm('Delete ALL sections of this test and their questions permanently? This cannot be undone.')">
+      <input type="hidden" name="test_id" value="{{ selected_test.id }}">
+      <button class="danger" type="submit">Delete all sections</button>
+    </form>
+    <a class="action-button" href="{{ url_for('admin_dashboard') }}">Close test</a>
+  </div>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Add section to {{ selected_test.title if selected_test else 'selected test' }}</h2>
+    <form method="post" action="{{ url_for('add_section') }}">
+      <input type="hidden" name="test_id" value="{{ selected_test.id if selected_test else '' }}">
+      <label>Section name</label><input name="title" placeholder="Section 1" required>
+      <label>Duration in minutes</label><input type="number" name="duration_minutes" min="1" value="10" required>
+      <label>Additional seconds</label><input type="number" name="duration_seconds" min="0" max="59" value="0" required>
+      <label>Order</label><input type="number" name="order_no" min="1" placeholder="Automatic if blank">
+      <button type="submit">Add section</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Import Word and/or PDF</h2>
+    <form method="post" action="{{ url_for('import_docx') }}" enctype="multipart/form-data">
+      <input type="hidden" name="test_id" value="{{ selected_test.id if selected_test else '' }}">
+      <input type="file" name="document_files" accept=".docx,.pdf" multiple required>
+      <label class="check-label"><input type="checkbox" name="combine_into_one" value="yes"> Combine all selected files into one test section</label>
+      <label class="check-label"><input type="checkbox" name="assign_images_in_order" value="yes"> Auto-attach unassigned Word images to questions in order</label>
+      <label>Combined test title (optional)</label><input name="combined_section_title" placeholder="e.g. Full Practice Test">
+      <label>Combined test duration in minutes</label><input type="number" name="combined_duration_minutes" min="1" value="60">
+      <button type="submit">Import selected Word/PDF files</button>
+    </form>
+    <p class="muted">Required paragraph format:</p>
+<pre>SECTION: General Knowledge
+TIME: 10
+Q: Capital of Pakistan?
+A: Lahore
+B: Karachi
+C: Islamabad
+D: Quetta
+ANSWER: C</pre>
+    <p class="muted">Section names come from SECTION: headings inside each document; filenames are not used as section names. If a document has no SECTION: heading, its questions use “Imported Section”. Tick “Combine” to put every MCQ in one named section. Tick “Auto-attach” only when the Word file has one unassigned image for each MCQ in the same order. Repeat the Q/A/B/C/D/ANSWER block. Word and text-based PDF files are supported. Embedded images are imported automatically when placed with, or immediately beneath, their Q/A/B/C/D line. Scanned PDFs need OCR and are not supported by normal import.</p>
+  </section>
+
+  <section class="card">
+    <h2>AI import Word (.docx)</h2>
+    <form method="post" action="{{ url_for('import_docx_ai') }}" enctype="multipart/form-data">
+      <input type="hidden" name="test_id" value="{{ selected_test.id if selected_test else '' }}">
+      <input type="file" name="word_files" accept=".docx" multiple required>
+      <label class="check-label"><input type="checkbox" name="combine_into_one" value="yes"> Combine all selected files into one test section</label>
+      <label>Combined test title (optional)</label><input name="combined_section_title" placeholder="e.g. Full Practice Test">
+      <label>Combined test duration in minutes</label><input type="number" name="combined_duration_minutes" min="1" value="60">
+      <button type="submit">Extract with Claude AI</button>
+    </form>
+    <p class="muted">For normally formatted or mixed text/image papers. Claude finds sections, MCQs, answers and embedded images automatically. Choose one or multiple .docx files. Tick "Combine" to put all extracted MCQs into one section. Review imported questions before students begin the test.</p>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Add question</h2>
+  {% if sections %}
+  <form method="post" action="{{ url_for('add_question') }}" enctype="multipart/form-data">
+    <label>Section</label>
+    <select name="section_id" required>
+      {% for s in sections %}<option value="{{ s.id }}">{{ s.order_no }} - {{ s.title }}</option>{% endfor %}
+    </select>
+    <label>Question</label><textarea name="text" required></textarea>
+    <label>Question image (optional)</label><input type="file" name="image" accept="image/*">
+    {% for letter in ['a','b','c','d'] %}
+      <div class="option-admin">
+        <label>Option {{ letter|upper }}</label><input name="option_{{ letter }}" required>
+        <label>Option {{ letter|upper }} image (optional)</label><input type="file" name="option_{{ letter }}_image" accept="image/*">
+      </div>
+    {% endfor %}
+    <label>Correct option</label>
+    <select name="correct_option" required><option>A</option><option>B</option><option>C</option><option>D</option></select>
+    <button type="submit">Add question</button>
+  </form>
+  {% else %}<p>Add a section first.</p>{% endif %}
+</section>
+
+{% for s in sections %}
+<section class="card" id="admin-section-{{ s.id }}">
+  <div class="section-card-header">
+    <div>
+      <p class="section-number">Section {{ s.order_no }}</p>
+      <h2>{{ s.title }}</h2>
+      <p class="section-summary">{{ s.duration_minutes }} min {{ s.duration_seconds }} sec <span>·</span> {{ section_mark_summaries[s.id].total_marks }} marks <span>·</span> Pass: {{ section_mark_summaries[s.id].passing_marks }} marks ({{ section_mark_summaries[s.id].pass_percentage|round(2) }}%)</p>
+    </div>
+    <form class="delete-form section-delete-form" method="post" action="{{ url_for('delete_section', section_id=s.id) }}" onsubmit="return confirm('Delete this section and its questions?')">
+      <button class="danger small" type="submit">Delete section</button>
+    </form>
+  </div>
+  <form class="section-settings-form section-threshold-form" method="post" action="{{ url_for('update_section', section_id=s.id) }}">
+    <label>Section name<input name="title" value="{{ s.title }}" required maxlength="200"></label>
+    <label>Minutes<input type="number" name="duration_minutes" value="{{ s.duration_minutes }}" min="1" required></label>
+    <label>Seconds<input type="number" name="duration_seconds" value="{{ s.duration_seconds }}" min="0" max="59" required></label>
+    <label>Total marks<input type="number" name="total_marks" value="{{ section_mark_summaries[s.id].total_marks }}" readonly></label>
+    <label>Passing marks<input type="number" name="pass_marks" value="{{ section_mark_summaries[s.id].passing_marks }}" min="0" max="{{ section_mark_summaries[s.id].total_marks }}" step="1" required></label>
+    <label>Passing %<input type="number" name="pass_percentage" value="{{ section_mark_summaries[s.id].pass_percentage }}" min="0" max="100" step="0.000001" required></label>
+    <input type="hidden" name="threshold_basis" value="percentage">
+    <button class="save-section-button" type="submit">Save section settings</button>
+  </form>
+  {% if s.questions %}
+    <ol>
+    {% for q in s.questions %}
+      <li class="admin-question">
+        <div class="question-list-item" id="question-{{ q.id }}">
+          <strong>{{ q.text }}</strong>
+          <div class="question-options-list">
+            <span>A: {{ q.option_a }}</span>
+            <span>B: {{ q.option_b }}</span>
+            <span>C: {{ q.option_c }}</span>
+            <span>D: {{ q.option_d }}</span>
+          </div>
+          <span class="muted">(Answer: {{ q.correct_option }})</span>
+          <div class="question-actions">
+            <button class="small edit-btn" onclick="showEditForm({{ q.id }}, this)">Edit</button>
+            <form class="delete-form" method="post" action="{{ url_for('delete_question', question_id=q.id) }}" onsubmit="return confirm('Delete this question?')">
+              <button class="danger small" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+        <div class="edit-form" id="editform-{{ q.id }}" style="display:none;">
+          <form method="post" action="{{ url_for('update_question', question_id=q.id) }}">
+            <label>Question</label><textarea name="text" required>{{ q.text }}</textarea>
+            {% for letter in ['a','b','c','d'] %}
+              <div class="option-admin">
+                <label>Option {{ letter|upper }}</label><input name="option_{{ letter }}" value="{{ q['option_' + letter] }}" required>
+              </div>
+            {% endfor %}
+            <label>Correct option</label>
+            <select name="correct_option" required>
+              <option value="A" {% if q.correct_option=='A' %}selected{% endif %}>A</option>
+              <option value="B" {% if q.correct_option=='B' %}selected{% endif %}>B</option>
+              <option value="C" {% if q.correct_option=='C' %}selected{% endif %}>C</option>
+              <option value="D" {% if q.correct_option=='D' %}selected{% endif %}>D</option>
+            </select>
+            <button type="submit">Save</button>
+            <button type="button" class="small" onclick="hideEditForm({{ q.id }}, this)">Cancel</button>
+          </form>
+        </div>
+      </li>
+    {% endfor %}
+    </ol>
+  {% else %}<p>No questions yet.</p>{% endif %}
+</section>
+{% endfor %}
+
+{% endif %}
+
+<script>
+document.querySelectorAll('.section-threshold-form').forEach(form => {
+  const totalInput = form.querySelector('[name="total_marks"]');
+  const marksInput = form.querySelector('[name="pass_marks"]');
+  const percentageInput = form.querySelector('[name="pass_percentage"]');
+  const basisInput = form.querySelector('[name="threshold_basis"]');
+
+  function updateMarksFromPercentage() {
+    const total = Number(totalInput.value);
+    const percentage = Number(percentageInput.value);
+    basisInput.value = 'percentage';
+    marksInput.max = String(total);
+    if (total > 0 && percentageInput.value !== '') {
+      marksInput.value = String(Math.ceil(total * percentage / 100 - 1e-7));
+    }
+  }
+
+  function updatePercentageFromMarks() {
+    const total = Number(totalInput.value);
+    const marks = Number(marksInput.value);
+    basisInput.value = 'marks';
+    marksInput.max = String(total);
+    if (total > 0 && marksInput.value !== '') {
+      marksInput.value = String(Math.min(marks, total));
+      percentageInput.value = (Number(marksInput.value) / total * 100).toFixed(6);
+    }
+  }
+
+  percentageInput.addEventListener('input', updateMarksFromPercentage);
+  marksInput.addEventListener('input', updatePercentageFromMarks);
+  totalInput.addEventListener('input', () => {
+    if (basisInput.value === 'marks') updatePercentageFromMarks();
+    else updateMarksFromPercentage();
+  });
+  if (totalInput.value) updateMarksFromPercentage();
+});
+
+function showEditForm(id, btn) {
+  document.getElementById('question-' + id).style.display = 'none';
+  document.getElementById('editform-' + id).style.display = 'block';
+}
+function hideEditForm(id, btn) {
+  document.getElementById('editform-' + id).style.display = 'none';
+  document.getElementById('question-' + id).style.display = 'block';
+}
+// Save the current admin location before a delete redirect.
+document.querySelectorAll('.delete-form, form[action*="delete-all"]').forEach(form => {
+  form.addEventListener('submit', () => {
+    const section = form.closest('.card[id^="admin-section-"]');
+    const cards = [...document.querySelectorAll('.card[id^="admin-section-"]')];
+    const cardIndex = section ? cards.indexOf(section) : -1;
+    const isSectionDelete = form.action.includes('/section/');
+    const nearbySection = isSectionDelete && section
+      ? (cards[cardIndex + 1] || cards[cardIndex - 1])
+      : section;
+    sessionStorage.setItem('admin_scroll', JSON.stringify({
+      y: form.action.includes('delete-all') ? 0 : window.scrollY,
+      anchor: nearbySection ? nearbySection.id : null
+    }));
+  });
+});
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = sessionStorage.getItem('admin_scroll');
+  if (!saved) return;
+  sessionStorage.removeItem('admin_scroll');
+  let position;
+  try { position = JSON.parse(saved); } catch { position = { y: Number(saved) || 0 }; }
+  requestAnimationFrame(() => {
+    const anchor = position.anchor && document.getElementById(position.anchor);
+    window.scrollTo(0, anchor ? Math.max(0, anchor.offsetTop - 18) : (position.y || 0));
+  });
+});
+</script>
+<style>
+.question-options-list {
+  display: flex; gap: 12px; margin: 4px 0;
+}
+.question-options-list span {
+  background: #f0f0f0; padding: 2px 8px; border-radius: 4px; font-size: 0.9em;
+}
+.question-actions {
+  display: flex; gap: 8px; align-items: center;
+}
+.edit-form {
+  margin: 10px 0; padding: 12px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;
+}
+</style>
+{% endblock %}

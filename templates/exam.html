@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}{{ section.title }}{% endblock %}
+{% block content %}
+<div class="exam-head">
+  <div>
+    <h1 class="exam-test-name">{{ test.title }}</h1>
+    <h2 class="exam-section-name">Section {{ section.order_no }}: {{ section.title }}</h2>
+    <p class="question-progress">Question {{ question_no }} of {{ question_count }}</p>
+  </div>
+  <div class="timer-box">Time left: <span id="timer"></span></div>
+</div>
+
+<div class="timer-alert-slot">
+  <div id="timer-alert" class="timer-alert-banner" role="alert" hidden>
+    <span class="timer-alert-bulb" aria-hidden="true"></span>
+    <strong id="timer-alert-text">Time short</strong>
+  </div>
+</div>
+
+<div class="exam-layout">
+<section class="card question-card">
+  <h2>{{ question.text }}</h2>
+  {% if question.image %}<img class="question-image" src="{{ url_for('static', filename='uploads/' + question.image) }}" alt="Question image">{% endif %}
+
+  <form method="post" action="{{ url_for('answer', question_id=question.id) }}" id="answerForm">
+    {% for letter, text, image in [
+      ('A', question.option_a, question.option_a_image),
+      ('B', question.option_b, question.option_b_image),
+      ('C', question.option_c, question.option_c_image),
+      ('D', question.option_d, question.option_d_image)
+    ] %}
+      <label class="option">
+        <input type="radio" name="answer" value="{{ letter }}" required>
+        <span><strong>{{ letter }}.</strong> {{ text }}</span>
+        {% if image %}<img class="option-image" src="{{ url_for('static', filename='uploads/' + image) }}" alt="Option {{ letter }} image">{% endif %}
+      </label>
+    {% endfor %}
+    <button type="submit" id="submitBtn" class="next-button">Next</button>
+  </form>
+</section>
+
+<aside class="exam-sections" aria-label="Test sections">
+  <h2>Test sections</h2>
+  <ol>
+    {% for exam_section in exam_sections %}
+      {% set section_attempt = attempt.section_attempts|selectattr('section_id', 'equalto', exam_section.id)|list|first %}
+      <li class="{{ 'current' if exam_section.id == section.id else '' }} {{ 'passed' if section_attempt and section_attempt.passed else '' }} {{ 'failed' if section_attempt and section_attempt.finished_at and not section_attempt.passed else '' }}">
+        <span>{{ exam_section.order_no }}. {{ exam_section.title }}</span>
+        {% if section_attempt and section_attempt.finished_at and section_attempt.passed %}<strong class="section-passed-label" aria-label="Passed">Passed <span class="section-score">{{ section_scores[exam_section.id].correct }} / {{ section_scores[exam_section.id].total }}</span></strong>{% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+</aside>
+</div>
+
+<script>
+  let seconds = {{ remaining_seconds|int }};
+  const timer = document.getElementById('timer');
+  const timerAlert = document.getElementById('timer-alert');
+  const timerAlertText = document.getElementById('timer-alert-text');
+  const form = document.getElementById('answerForm');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function drawTimer() {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    timer.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    const warningActive = seconds <= 40 && seconds > 0;
+    timerAlert.hidden = !warningActive;
+    timerAlert.classList.toggle('timer-alert-fast', warningActive && seconds <= 10);
+    timerAlertText.textContent = seconds <= 10 ? 'Time Very Short' : 'Time short';
+    if (seconds <= 0) {
+      window.location.href = "{{ url_for('timeout', section_id=section.id) }}";
+      return;
+    }
+    seconds--;
+  }
+  drawTimer();
+  setInterval(drawTimer, 1000);
+
+  form.addEventListener('submit', function () {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Next...';
+  });
+</script>
+{% endblock %}

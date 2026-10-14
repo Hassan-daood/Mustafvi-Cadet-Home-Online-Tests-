@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Admin Login{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Admin Login</h1>
+  <form method="post" autocomplete="off" data-lpignore="true" data-1p-ignore="true">
+    <label>Password</label>
+    <div class="password-field">
+      <input id="admin-login-password" type="password" name="password" placeholder="Write password" autocomplete="new-password" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" autofocus required>
+      <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" onclick="togglePassword('admin-login-password', this)">&#128065;</button>
+    </div>
+    <button type="submit">Login</button>
+  </form>
+</section>
+<script>
+  function togglePassword(inputId, toggleButton) {
+    const input = document.getElementById(inputId);
+    const showing = input.type === 'password';
+    input.type = showing ? 'text' : 'password';
+    toggleButton.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+    toggleButton.setAttribute('aria-pressed', String(showing));
+  }
+
+</script>
+{% endblock %}

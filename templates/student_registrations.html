@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Student Registration{% endblock %}
+{% block content %}
+<div class="student-registration-page">
+  <div class="row between centre student-registration-heading">
+    <div>
+      <h1>Student Registration</h1>
+      <p class="muted">Add students, update their details, or find a class roster.</p>
+    </div>
+    <a class="action-button" href="{{ url_for('admin_dashboard') }}">Back to Admin</a>
+  </div>
+
+  <section class="card">
+    <h2>Register student</h2>
+    <form method="post" action="{{ url_for('register_student') }}" class="student-registration-form">
+      <label for="new-student-name">Student name<input id="new-student-name" name="name" maxlength="200" required></label>
+      <label for="new-student-roll">Roll number <span class="muted">Leave blank to assign automatically</span><input id="new-student-roll" name="roll_no" maxlength="100"></label>
+      <label for="new-student-class">Class<input id="new-student-class" name="class_name" maxlength="100" required></label>
+      <button type="submit">Register student</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="row between centre student-list-heading">
+      <div>
+        <h2>All students</h2>
+        <p class="muted">{{ students|length }} student{{ '' if students|length == 1 else 's' }}</p>
+      </div>
+      <form method="get" action="{{ url_for('admin_student_registrations') }}" class="student-search-form">
+        <label for="student-search">Search students<input id="student-search" name="q" value="{{ query }}" placeholder="Name, roll number, or class"></label>
+        <label for="class-filter">Class<select id="class-filter" name="class_filter">
+            <option value="">All classes</option>
+            {% for class_name in classes %}
+            <option value="{{ class_name }}" {% if class_filter == class_name %}selected{% endif %}>{{ class_name }}</option>
+            {% endfor %}
+          </select></label>
+        <label for="student-sort">Sort by<select id="student-sort" name="sort_by">
+            <option value="roll_asc" {% if sort_by == 'roll_asc' %}selected{% endif %}>Roll number ascending</option>
+            <option value="class_roll" {% if sort_by == 'class_roll' %}selected{% endif %}>Class, then roll number</option>
+            <option value="renumber" {% if sort_by == 'renumber' %}selected{% endif %}>Sequential renumbering (1 onwards)</option>
+          </select></label>
+        <button type="submit">Search</button>
+        {% if query or class_filter %}<a class="action-button" href="{{ url_for('admin_student_registrations') }}">Clear</a>{% endif %}
+      </form>
+    </div>
+
+    {% if students %}
+    <div class="student-admin-list">
+      {% for student in students %}
+      <article class="student-admin-row">
+        <form method="post" action="{{ url_for('update_student', student_id=student.id) }}" class="student-edit-form">
+          <input type="hidden" name="class_filter" value="{{ class_filter }}">
+          <input type="hidden" name="q" value="{{ query }}">
+          <label>Roll number<input name="roll_no" value="{{ student.roll_no }}" maxlength="100" required></label>
+          <label>Student name<input name="name" value="{{ student.name }}" maxlength="200" required></label>
+          <label>Class<input name="class_name" value="{{ student.class_name }}" maxlength="100" required></label>
+          <button class="small" type="submit">Save changes</button>
+        </form>
+        <form method="post" action="{{ url_for('delete_student', student_id=student.id) }}" class="student-delete-form" onsubmit="return confirm('Delete this student and all of their saved test history?')">
+          <button class="danger small" type="submit">Delete</button>
+        </form>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No students match this search.</p>
+    {% endif %}
+  </section>
+</div>
+<script>
+const studentSort = document.getElementById('student-sort');
+let previousSort = studentSort.value;
+studentSort.addEventListener('change', () => {
+  if (studentSort.value !== 'renumber') {
+    previousSort = studentSort.value;
+    return;
+  }
+  if (!window.confirm('Reassign every student roll number from 1 onwards? Existing roll numbers will change. A backup will be created first.')) {
+    studentSort.value = previousSort;
+    return;
+  }
+  const renumberForm = document.createElement('form');
+  renumberForm.method = 'post';
+  renumberForm.action = {{ url_for('renumber_students')|tojson }};
+  document.body.appendChild(renumberForm);
+  renumberForm.submit();
+});
+</script>
+{% endblock %}

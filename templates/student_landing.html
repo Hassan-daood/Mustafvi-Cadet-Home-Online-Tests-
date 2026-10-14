@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}Student Dashboard{% endblock %}
+{% block content %}
+<section class="student-landing">
+  {% if password_gate %}
+  <div class="school-intro">
+    <div class="school-branding">
+      <img class="school-intro-logo" src="{{ url_for('static', filename='images/school-logo-transparent.png') }}" alt="Mustafvi Cadet Home logo">
+      <h1>Mustafvi Cadet Home</h1>
+    </div>
+    <p>Online MCQ examination portal</p>
+  </div>
+
+  <section class="card narrow student-password-card">
+    <h2>Student Dashboard</h2>
+    <form method="post" action="{{ url_for('student_login') }}" autocomplete="off">
+      <label for="student-password">Password</label>
+      <input id="student-password" type="password" name="password" placeholder="Write password" autocomplete="off" autocapitalize="none" spellcheck="false" autofocus required>
+      <button type="submit">Continue</button>
+    </form>
+  </section>
+  {% else %}
+  <div class="school-intro">
+    <div class="school-branding">
+      <img class="school-intro-logo" src="{{ url_for('static', filename='images/school-logo-transparent.png') }}" alt="Mustafvi Cadet Home logo">
+      <h1>Mustafvi Cadet Home</h1>
+    </div>
+    <p>Online MCQ examination portal</p>
+  </div>
+
+  <div class="landing-panels">
+    <section class="card landing-panel">
+      <h2>Prepare Your Test</h2>
+      <form method="post" action="{{ url_for('prepare_student_dashboard') }}">
+        <label for="landing-test">Choose test</label>
+        <select id="landing-test" name="test_id" required>
+          {% for test in tests %}
+            <option value="{{ test.id }}" {% if selected_test and test.id == selected_test.id %}selected{% endif %}>{{ test.title }}</option>
+          {% endfor %}
+        </select>
+
+        <fieldset class="test-mode-options">
+          <legend>When a section is failed</legend>
+          <label class="radio-label">
+            <input type="radio" name="section_failure_mode" value="stop" checked>
+            Stop the test immediately
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="section_failure_mode" value="all">
+            Complete all sections
+          </label>
+        </fieldset>
+
+        <button type="submit">Start</button>
+      </form>
+    </section>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

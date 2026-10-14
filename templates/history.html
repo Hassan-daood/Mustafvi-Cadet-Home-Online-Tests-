@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}Test History{% endblock %}
+{% block content %}
+{% if session.get('admin_logged_in') %}
+<div class="report-actions compact-actions">
+  <a class="button-link" href="{{ url_for('admin_dashboard') }}">Back to Admin Dashboard</a>
+  <a class="button-link" href="{{ url_for('overall_results', test_id=selected_test.id if selected_test else '') }}">Overall Result Report</a>
+</div>
+{% endif %}
+<aside class="history-roster" aria-label="Students list">
+  <h2>Students</h2>
+  <table>
+    <thead><tr><th>Roll No</th><th>Name</th></tr></thead>
+    <tbody>
+      {% for student in students %}
+      <tr><td>{{ student.roll_no }}</td><td>{{ student.name }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</aside>
+<section class="card narrow">
+  <h1>Previous Test History</h1>
+  <p>Search by student details or by the date on which tests were taken.</p>
+  {% if session.get('admin_logged_in') %}
+  <form method="post" action="{{ url_for('delete_all_history') }}" onsubmit="return confirm('Delete ALL previous test history permanently? This cannot be undone.')">
+    <button class="danger" type="submit">Delete all history</button>
+  </form>
+  {% endif %}
+  <form method="get" action="{{ url_for('history') }}" class="history-search-form" id="history-search-form">
+    <label>Test (optional)</label>
+    <select name="test_id">
+      <option value="">All tests</option>
+      {% for test in tests %}
+        <option value="{{ test.id }}" {% if selected_test and test.id == selected_test.id %}selected{% endif %}>{{ test.title }}</option>
+      {% endfor %}
+    </select>
+    <div class="history-search-columns">
+      <div>
+        <h3>Search by student</h3>
+        <label>Roll number</label>
+        <input name="roll_no" value="{{ roll_no }}" maxlength="100">
+        <label>Student name</label>
+        <input name="name" value="{{ name }}" maxlength="200">
+      </div>
+      <div>
+        <h3>Search by date</h3>
+        <label>From date</label>
+        <input type="date" name="start_date" value="{{ start_date }}">
+        <label>To date</label>
+        <input type="date" name="end_date" value="{{ end_date }}">
+      </div>
+    </div>
+    <button type="submit">Search history</button>
+    <button type="button" class="button-link" onclick="clearHistoryDates()">Clear dates</button>
+  </form>
+</section>
+
+<script>
+  function clearHistoryDates() {
+    document.querySelector('[name="start_date"]').value = '';
+    document.querySelector('[name="end_date"]').value = '';
+    document.getElementById('history-search-form').submit();
+  }
+</script>
+
+{% if searched %}
+<section class="card history-results" id="history-results">
+  {% if attempt_rows %}
+  {% if progress_student %}
+  {% include 'student_progress_analytics.html' %}
+  {% endif %}
+  <div class="history-results-toolbar">
+    <h2>{{ attempt_rows|length }} previous attempt{{ '' if attempt_rows|length == 1 else 's' }}</h2>
+    <div class="history-bulk-actions">
+      <a class="action-button" href="{{ url_for('download_history_word', name=name, roll_no=roll_no, test_id=selected_test.id if selected_test else '', start_date=start_date, end_date=end_date) }}">Download Word</a>
+      <button type="button" onclick="window.print()">Print Report</button>
+    </div>
+  </div>
+  {% for row in attempt_rows %}
+  <div class="attempt-card" id="attempt-card-{{ row.attempt.id }}">
+    <div class="history-attempt-summary">
+      <div><span class="muted">Student</span><strong>{{ row.attempt.student.name }}</strong></div>
+      <div><span class="muted">Roll #</span><strong>{{ row.attempt.student.roll_no }}</strong></div>
+      <div><span class="muted">Attempt #{{ attempt_rows|length - loop.index + 1 }} · Test</span><strong>{{ row.attempt.test.title if row.attempt.test else 'Test' }}</strong></div>
+      <div><span class="muted">Overall score</span><strong class="score-box">{{ row.score }}% | {{ row.total_correct }} / {{ row.total_questions }}</strong></div>
+      <div>
+        <span class="muted">Result</span>
+        {% if row.score >= row.pass_percentage %}
+          <span class="detail-badge badge-pass">PASS</span>
+        {% else %}
+          <span class="detail-badge badge-fail">FAIL</span>
+        {% endif %}
+      </div>
+      <div><span class="muted">Date</span><strong>{{ row.attempt.started_at|to_pkdt|strftime('%d %b %Y, %I:%M %p') }}</strong></div>
+      <div><span class="muted">Sections</span><strong>{{ row.sections }}</strong></div>
+      {% if session.get('admin_logged_in') %}
+      <div class="history-attempt-delete">
+        <span class="muted">Action</span>
+        <form method="post" action="{{ url_for('delete_history_attempt', attempt_id=row.attempt.id) }}" onsubmit="return confirm('Delete this previous test record permanently?')">
+          <button class="danger small" type="submit">Delete</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if row.section_details|length > 1 %}
+    <h4 style="margin: 10px 0 6px;">Section-wise Results</h4>
+    <table>
+      <thead><tr><th>Section</th><th>Correct / Total</th><th>Percentage</th><th>Passed</th></tr></thead>
+      <tbody>
+      {% for sec in row.section_details %}
+        <tr class="section-row {{ 'section-result-fail' if not sec.passed else 'section-result-pass' }}">
+          <td>{{ sec.title }}</td>
+          <td>{{ sec.correct }} / {{ sec.total }}</td>
+          <td>{{ sec.percentage }}%</td>
+          <td>
+            {% if sec.passed %}
+              <span class="detail-badge badge-pass">PASS</span>
+            {% else %}
+              <span class="detail-badge badge-fail">FAIL</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    <div class="attempt-actions">
+      <button class="action-button" type="button" onclick="window.location.href='{{ url_for('history_view_results', attempt_id=row.attempt.id, roll_no=roll_no, name=name) }}'">View Result Report</button>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+    <p>No previous test record found for this search.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

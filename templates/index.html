@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}Start Test{% endblock %}
+{% block content %}
+<style>
+  /* Students roster panel: fixed to the far-left edge of the screen.
+     position:fixed takes it out of normal document flow, so it can
+     never shift the centred form card or the sections table below. */
+  .roster-sidebar {
+    position: fixed;
+    top: 114px;
+    left: 30px;
+    margin: 0;
+    width: 260px;
+    max-height: calc(100vh - 138px);
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 14px;
+    border-right: 3px solid #0c3626;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, .12);
+    padding: 16px 14px;
+    z-index: 20;
+  }
+  .roster-sidebar h3 {
+    margin: 0 0 10px;
+    font-size: .9rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #0c3626;
+  }
+  .roster-sidebar table { width: 100%; border-collapse: collapse; }
+  .roster-sidebar th, .roster-sidebar td {
+    text-align: left;
+    padding: 6px 7px;
+    font-size: .88rem;
+    border-bottom: 1px solid #ececec;
+  }
+  .roster-sidebar thead th {
+    background: transparent;
+    color: #0c3626;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 700;
+    padding: 6px 7px;
+  }
+  /* Test Structure box: scrolls inside itself, like the Students list.
+     style.css sets body { zoom: .75 }, so the height is divided by .75 to
+     end ~24px above the bottom edge of the screen (box starts 64px from top). */
+  @media (min-width: 761px) {
+    .test-structure-card {
+      max-height: calc((100vh - 88px) / 0.75);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
+  /* Desktop/laptop screens tall enough to show the whole form: lock the page
+     itself (background + screen stay still). Short windows keep normal scrolling
+     so the Start Test button can never become unreachable. */
+  @media (min-width: 761px) and (min-height: 560px) {
+    body.page-student_dashboard { overflow: hidden; }
+  }
+  @media (max-width: 760px) {
+    /* Keep the compact mobile layout clear of the fixed student roster. */
+    .roster-sidebar { position: static; width: 100%; max-height: 240px; overflow-y: auto; margin: 0 0 18px; border-right: 0; border-left: 3px solid #0c3626; }
+  }
+</style>
+<aside class="roster-sidebar" aria-label="Students list">
+  <h3>Students</h3>
+  <table>
+    <thead><tr><th>Roll No</th><th>Name</th></tr></thead>
+    <tbody>
+      {% for student in students %}
+      <tr><td>{{ student.roll_no }}</td><td>{{ student.name }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</aside>
+
+<section class="school-intro">
+  <div class="school-branding">
+    <img class="school-intro-logo" src="{{ url_for('static', filename='images/school-logo-transparent.png') }}" alt="Mustafvi Cadet Home logo">
+    <div>
+      <h1>Mustafvi Cadet Home</h1>
+    </div>
+  </div>
+  <p>Online MCQ examination portal</p>
+</section>
+
+<div class="student-test-panels">
+<section class="card narrow student-details-card">
+  <h2>Start Test</h2>
+  <p>Enter your details. Each question is compulsory, and once submitted an answer cannot be changed.</p>
+  <form method="post" action="{{ url_for('start_exam') }}">
+    <input type="hidden" name="test_id" value="{{ selected_test.id if selected_test else '' }}">
+    <input type="hidden" name="section_failure_mode" value="{{ section_failure_mode }}">
+    <label for="student-roll-no">Roll number</label>
+    <input id="student-roll-no" name="roll_no" value="{{ form_roll_no }}" autocapitalize="none" spellcheck="false" required maxlength="100">
+    <label for="student-name">Student name</label>
+    <input id="student-name" name="name" value="{{ form_name }}" autocapitalize="none" spellcheck="false" required maxlength="200">
+    <button type="submit">Start Test</button>
+  </form>
+</section>
+
+<section class="card test-structure-card">
+  <h2>Test Structure</h2>
+  {% if selected_test and sections %}
+    <h3>{{ selected_test.title }}</h3>
+    <div class="test-overview-summary" aria-label="Test question and time totals">
+      <div class="overview-metric"><span>Total questions</span><strong>{{ total_marks }}</strong></div>
+      <div class="overview-metric"><span>Total time</span><strong>{{ selected_test_total_seconds // 60 }}m {{ selected_test_total_seconds % 60 }}s</strong></div>
+    </div>
+    <div class="marks-summary" aria-label="Overall marks and passing requirements">
+      <div class="marks-metric total-marks"><span>Total marks</span><strong>{{ total_marks }}</strong></div>
+      <div class="marks-metric passing-marks"><span>Passing marks</span><strong>{{ passing_marks }}</strong></div>
+      <div class="marks-metric pass-percentage"><span>Pass percentage</span><strong>{{ selected_test.pass_percentage }}%</strong></div>
+    </div>
+    <div class="overall-structure-meta">
+      <span>{{ sections|length }} sections</span>
+      <span>Overall test</span>
+    </div>
+    <div class="section-structure-list">
+      {% for s in sections %}
+      <div class="section-structure-item">
+        <strong>Section {{ s.order_no }}: {{ s.title }}</strong>
+        <div class="section-mark-summary">
+          <span>Total <strong>{{ s.questions|length }}</strong></span>
+          <span>Pass marks <strong>{{ section_passing_marks[s.id] }}</strong></span>
+          <span>Pass % <strong>{{ section_pass_percentages[s.id]|round(2) }}%</strong></span>
+        </div>
+        <span class="section-time">Time: {{ s.duration_minutes }} min {{ s.duration_seconds }} sec</span>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>No tests or sections have been added yet.</p>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MCQ Exam System{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="page-{{ request.endpoint or 'default' }}">
+  <header class="topbar">
+    <div class="container row centre nav-centre">
+      <div class="topbar-brand">
+        <img class="topbar-logo" src="{{ url_for('static', filename='images/school-logo.jpeg') }}" alt="Mustafvi Cadet Home logo">
+        <span class="topbar-name">Mustafvi Cadet Home</span>
+      </div>
+      <nav>
+        <a href="{{ url_for('student_login') }}">Student</a>
+        {% if session.get('admin_logged_in') %}
+          <a href="{{ url_for('admin_login') }}">Admin</a>
+          <a href="{{ url_for('admin_logout') }}">Logout</a>
+        {% else %}
+          <a href="{{ url_for('admin_login') }}">Admin</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+  <main class="container">
+    <div class="flash-region">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
