@@ -941,6 +941,8 @@ def build_overall_progress_analytics(student_rows, selected_test, all_tests):
         row["attempt"].student.name.casefold(),
     ))
     total = len(progress_rows)
+    top_score_row = max(progress_rows, key=lambda row: row["score"], default=None)
+    low_score_row = min(progress_rows, key=lambda row: row["score"], default=None)
     average_percentage = round(sum(row["score"] for row in progress_rows) / total, 1) if total else 0
     passing_percentage = (
         test_marks_summary(selected_test)["pass_percentage"]
@@ -1106,6 +1108,18 @@ def build_overall_progress_analytics(student_rows, selected_test, all_tests):
         "overall_passing_percentage": round(passing_percentage, 1),
         "passed_count": passed_count,
         "progress_total_students": total,
+        "top_score_student": ({
+            "name": top_score_row["attempt"].student.name,
+            "marks": top_score_row["correct"],
+            "total_marks": top_score_row["total"],
+            "percentage": top_score_row["score"],
+        } if top_score_row else None),
+        "low_score_student": ({
+            "name": low_score_row["attempt"].student.name,
+            "marks": low_score_row["correct"],
+            "total_marks": low_score_row["total"],
+            "percentage": low_score_row["score"],
+        } if low_score_row else None),
         "passed_percentage": round(passed_count / total * 100, 1) if total else 0,
         "tests_average_passing_rate": tests_average_passing_rate,
         "score_distribution": score_distribution,
@@ -1387,7 +1401,7 @@ def draw_distribution_chart(canvas, ox, oy, analytics):
     canvas.vertical_text(ox + 15, oy + analytics["dist_mid_y"], "Student percentage", 12, "4B5563")
     for tick in analytics["dist_chart_ticks"]:
         canvas.text(ox + 53, oy + tick["y"] + 3.5, f"{tick['value']}%", 10, WORD_MUTED, anchor="rs")
-    band_names = {"Fail": "Failed", "Pass": "Passed", "High score": "High scorer"}
+    band_names = {"Fail": "Failed", "Pass": "Average", "High score": "Good"}
     for band in (item for item in analytics["score_distribution"] if not item.get("dot")):
         fill = "FFF1F2" if band["label"] == "Fail" else "F7FEE7" if band["label"] == "Pass" else "ECFDF5"
         canvas.rect(ox + band["x"], oy + band["y"], ox + band["x"] + band["width"], oy + band["y"] + band["height"], fill=fill)
