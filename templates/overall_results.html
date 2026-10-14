@@ -101,7 +101,7 @@
           <g class="score-count-click" data-min="{{ bucket.min }}" data-max="{{ bucket.max }}" onclick="filterByBand(this)" onmouseleave="this.classList.remove('suppress-hover')">
             <rect x="{{ bucket.x }}" y="{{ bucket.y }}" width="{{ bucket.width }}" height="{{ bucket.height }}" fill="{{ ['url(#band-failed)', 'url(#band-passed)', 'url(#band-high)'][loop.index0] }}"></rect>
             <rect class="chart-hit" x="{{ bucket.x }}" y="{{ bucket.y }}" width="{{ bucket.width }}" height="{{ bucket.height }}"></rect>
-            <text x="{{ bucket.label_x }}" y="{{ bucket.label_y }}" text-anchor="end" fill="{{ bucket.color }}" font-size="14" font-weight="800">{{ {'Fail':'Failed','Pass':'Passed','High score':'High scorer'}[bucket.label] }} · {{ bucket.count }}</text>
+            <text x="{{ bucket.label_x }}" y="{{ bucket.label_y }}" text-anchor="end" fill="{{ bucket.color }}" font-size="14" font-weight="800">{{ {'Fail':'Failed','Pass':'Average','High score':'Good'}[bucket.label] }} · {{ bucket.count }}</text>
           </g>
           {% endif %}
           {% endfor %}
@@ -111,21 +111,41 @@
       </div>
       {% endif %}
     </div>
-    <div class="history-average-panel">
-      <h3>Overall average percentage</h3>
-      <div class="history-average-donut" style="--average: {{ overall_progress.average_percentage }}%;">
-        <span>{{ overall_progress.average_percentage }}%</span>
+    <div class="history-donut-group">
+      <div class="history-average-panel">
+        <h3>Overall average percentage</h3>
+        <div class="history-average-donut" style="--average: {{ overall_progress.average_percentage }}%;">
+          <span>{{ overall_progress.average_percentage }}%</span>
+        </div>
+        <p>{{ 'All selected tests' if all_tests else 'Selected test' }}</p>
       </div>
-      <p>{{ 'All selected tests' if all_tests else 'Selected test' }}</p>
-    </div>
-    <div class="history-average-panel">
-      <h3>Passing rate</h3>
-      <div class="history-average-donut" style="--average: {{ overall_progress.tests_average_passing_rate if all_tests else overall_progress.passed_percentage }}%;">
-        <span>{{ overall_progress.tests_average_passing_rate if all_tests else overall_progress.passed_percentage }}%</span>
+      <div class="history-average-panel">
+        <h3>Passing rate</h3>
+        <div class="history-average-donut" style="--average: {{ overall_progress.tests_average_passing_rate if all_tests else overall_progress.passed_percentage }}%;">
+          <span>{{ overall_progress.tests_average_passing_rate if all_tests else overall_progress.passed_percentage }}%</span>
+        </div>
+        <p>{{ 'Average across all tests' if all_tests else 'Students passed' }}</p>
       </div>
-      <p>{{ 'Average across all tests' if all_tests else 'Students passed' }}</p>
       <div class="history-pass-count"><strong>{{ overall_progress.passed_count }} / {{ overall_progress.progress_total_students }}</strong><span>Students passed / total</span></div>
     </div>
+    {% if overall_progress.top_score_student %}
+    <div class="history-score-highlights">
+      <div class="history-top-score history-high-score">
+        <span class="history-top-score-label">Highest score</span>
+        <strong>{{ overall_progress.top_score_student.name }}</strong>
+        <span>{{ overall_progress.top_score_student.marks }} / {{ overall_progress.top_score_student.total_marks }} marks</span>
+        <b>{{ overall_progress.top_score_student.percentage }}%</b>
+      </div>
+      {% if overall_progress.low_score_student %}
+      <div class="history-top-score history-low-score">
+        <span class="history-top-score-label">Lowest score</span>
+        <strong>{{ overall_progress.low_score_student.name }}</strong>
+        <span>{{ overall_progress.low_score_student.marks }} / {{ overall_progress.low_score_student.total_marks }} marks</span>
+        <b>{{ overall_progress.low_score_student.percentage }}%</b>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
   </section>
   {% endif %}
   <div class="report-actions">

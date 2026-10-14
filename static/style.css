@@ -888,17 +888,30 @@ pre {
 }
 
 /* Overall report keeps its chart beside both summary diagrams. */
-.overall-history-analytics { grid-template-columns: minmax(0, 1fr) 165px 165px; gap: 12px; }
+.overall-history-analytics { grid-template-columns: minmax(0, 1fr) 165px 165px; column-gap: 12px; row-gap: 4px; }
 .overall-history-analytics .history-progress-panel { grid-column: auto; }
 .overall-history-analytics .history-average-panel { padding-top: 10px; }
 .overall-history-analytics .history-average-panel h3 { min-height: 3em; }
-.overall-history-analytics .history-average-donut { width: 150px; }
-.overall-history-analytics .history-pass-count { margin-top: 14px; padding: 10px 14px; }
+.overall-history-analytics .history-average-donut { width: 160px; }
+.overall-history-analytics > .history-donut-group { grid-column: 2 / 4; grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 2px; align-self: start; }
+.overall-history-analytics .history-donut-group .history-pass-count { grid-column: 1 / -1; justify-self: center; width: min(100%, 260px); margin: 2px 0 0; padding: 8px 12px; border-radius: 8px; }
 .overall-history-analytics .history-pass-count strong { font-size: 1.55rem; }
 .overall-history-analytics .history-pass-count span { font-size: .95rem; }
+.overall-history-analytics > .history-score-highlights { grid-column: 1; grid-row: 2; display: grid; width: min(100%, 520px); grid-template-columns: repeat(2, minmax(0, 1fr)); align-self: start; justify-self: center; gap: 10px; }
+.history-top-score { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px; border: 1px solid #a7f3d0; border-left: 4px solid #059669; border-radius: 10px; background: linear-gradient(145deg, #f0fdf4, #dcfce7); box-shadow: 0 4px 12px rgba(5, 150, 105, .08); text-align: left; }
+.history-low-score { border-color: #fecaca; border-left-color: #dc2626; background: linear-gradient(145deg, #fff7f7, #fee2e2); box-shadow: 0 4px 12px rgba(220, 38, 38, .08); }
+.history-low-score .history-top-score-label,
+.history-low-score b { color: #b91c1c; }
+.history-low-score .history-top-score-label { color: #b91c1c; }
+.history-top-score-label { color: #0f766e; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.history-top-score strong { max-width: 100%; overflow-wrap: anywhere; color: var(--ink); font-size: .92rem; line-height: 1.25; }
+.history-top-score > span:not(.history-top-score-label) { color: var(--ink-soft); font-size: .78rem; }
+.history-top-score b { color: #047857; font-size: 1.12rem; }
 .overall-all-tests .history-progress-panel .history-chart-scroll { width: 82%; max-width: 760px; margin-inline: auto; }
 @media (max-width: 980px) {
-  .overall-history-analytics { grid-template-columns: minmax(0, 1fr) 145px 145px; gap: 10px; }
-  .overall-history-analytics .history-average-donut { width: 136px; }
+  .overall-history-analytics { grid-template-columns: minmax(0, 1fr) 145px 145px; column-gap: 10px; row-gap: 4px; }
+  .overall-history-analytics > .history-donut-group { column-gap: 10px; }
+  .overall-history-analytics .history-progress-panel { grid-column: auto; }
+  .overall-history-analytics .history-average-donut { width: 142px; }
   .overall-all-tests .history-progress-panel .history-chart-scroll { width: 96%; }
 }
