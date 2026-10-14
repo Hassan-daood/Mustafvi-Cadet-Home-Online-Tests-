@@ -376,6 +376,15 @@ def test_score(attempt):
     return total, correct, round(correct / total * 100, 2) if total else 0
 
 
+def attempt_overall_passed(attempt, score, pass_percentage):
+    """Match the final result page: an attempt stopped by a failed section fails overall."""
+    return (
+        attempt.status != "in_progress"
+        and score >= pass_percentage
+        and attempt.stopped_reason == "All sections completed"
+    )
+
+
 def get_section_attempt(attempt_id, section_id):
     return SectionAttempt.query.filter_by(attempt_id=attempt_id, section_id=section_id).first()
 
@@ -1680,7 +1689,7 @@ def word_response(buffer, filename):
 def word_status_pill(cell, attempt, score, pass_percentage, background=True):
     if attempt.status == "in_progress":
         word_cell_pill(cell, "IN PROGRESS", WORD_SLATE, WORD_SOFT if background else None, size=8)
-    elif score >= pass_percentage:
+    elif attempt_overall_passed(attempt, score, pass_percentage):
         word_cell_pill(cell, "PASS", WORD_GREEN, WORD_PASS_BG if background else None, size=8)
     else:
         word_cell_pill(cell, "FAIL", "B91C1C", WORD_FAIL_BG if background else None, size=8)
@@ -1796,6 +1805,12 @@ def download_history_word():
 
     attempt_rows = history_attempt_rows(attempts)
     analytics = build_student_progress_analytics(attempt_rows)
+    word_passed_attempts = sum(
+        attempt_overall_passed(row["attempt"], row["score"], row["pass_percentage"])
+        for row in attempt_rows
+    )
+    analytics["passed_attempts"] = word_passed_attempts
+    analytics["passed_percentage"] = round(word_passed_attempts / len(attempt_rows) * 100, 1) if attempt_rows else 0
     document = word_new_document(landscape=True)
     usable = word_usable_width(document)
     word_test_details(document, [row["attempt"].test for row in attempt_rows])
@@ -1838,7 +1853,7 @@ def download_history_word():
         word_cell_text(row_cells[1], attempt.student.roll_no, size=9.5, bold=True)
         word_cell_text(row_cells[2], attempt.test.title if attempt.test else "Test", size=9.5, bold=True)
         word_cell_pill(row_cells[3], f"{row['score']}% | {row['total_correct']} / {row['total_questions']}", WORD_BLUE, WORD_SOFT, size=9)
-        if row["score"] >= row["pass_percentage"]:
+        if attempt_overall_passed(attempt, row["score"], row["pass_percentage"]):
             word_cell_pill(row_cells[4], "PASS", WORD_GREEN, WORD_SOFT, size=8.5)
         else:
             word_cell_pill(row_cells[4], "FAIL", "B91C1C", WORD_SOFT, size=8.5)
@@ -2021,27 +2036,13 @@ def download_overall_results_word():
     attempts = attempts_query.order_by(Attempt.started_at.desc()).all()
     student_rows = []
     for attempt in attempts:
-        total = 0
-        correct = 0
-        for section_attempt in attempt.section_attempts:
-            if not section_attempt.section:
-                continue
-            total += Question.query.filter_by(section_id=section_attempt.section_id).count()
-            correct += (
-                db.session.query(Response)
-                .join(Question, Response.question_id == Question.id)
-                .filter(
-                    Response.attempt_id == attempt.id,
-                    Question.section_id == section_attempt.section_id,
-                    Response.is_correct.is_(True),
-                )
-                .count()
-            )
+        # Use the full test denominator, including sections not reached after a failure.
+        total, correct, score = test_score(attempt)
         student_rows.append({
             "attempt": attempt,
             "total": total,
             "correct": correct,
-            "score": round(correct / total * 100, 2) if total else 0,
+            "score": score,
             "pass_percentage": test_marks_summary(attempt.test)["pass_percentage"] if attempt.test else PASS_PERCENTAGE,
         })
     student_rows.sort(key=lambda row: (row["score"], row["correct"], row["attempt"].started_at), reverse=True)
@@ -2059,6 +2060,22 @@ def download_overall_results_word():
 
     if student_rows:
         analytics = build_overall_progress_analytics(student_rows, selected_test, all_tests)
+        word_passed_count = sum(
+            attempt_overall_passed(row["attempt"], row["score"], row["pass_percentage"])
+            for row in student_rows
+        )
+        analytics["passed_count"] = word_passed_count
+        analytics["passed_percentage"] = round(word_passed_count / len(student_rows) * 100, 1)
+        if all_tests:
+            word_rows_by_test = {}
+            for row in student_rows:
+                word_rows_by_test.setdefault(row["attempt"].test_id, []).append(row)
+            test_passing_rates = [
+                sum(attempt_overall_passed(row["attempt"], row["score"], row["pass_percentage"]) for row in rows)
+                / len(rows) * 100
+                for rows in word_rows_by_test.values() if rows
+            ]
+            analytics["tests_average_passing_rate"] = round(sum(test_passing_rates) / len(test_passing_rates), 1) if test_passing_rates else 0
         if all_tests:
             panel = render_analytics_panel(
                 "Overall student score distribution",
