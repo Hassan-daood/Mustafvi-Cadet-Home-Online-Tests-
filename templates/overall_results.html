@@ -110,6 +110,24 @@
         </svg>
       </div>
       {% endif %}
+      {% if overall_progress.top_score_student %}
+      <div class="history-score-highlights">
+        <div class="history-top-score history-high-score">
+          <span class="history-top-score-label">Highest score</span>
+          <strong>{{ overall_progress.top_score_student.name }}</strong>
+          <span>{{ overall_progress.top_score_student.marks }} / {{ overall_progress.top_score_student.total_marks }} marks</span>
+          <b>{{ overall_progress.top_score_student.percentage }}%</b>
+        </div>
+        {% if overall_progress.low_score_student %}
+        <div class="history-top-score history-low-score">
+          <span class="history-top-score-label">Lowest score</span>
+          <strong>{{ overall_progress.low_score_student.name }}</strong>
+          <span>{{ overall_progress.low_score_student.marks }} / {{ overall_progress.low_score_student.total_marks }} marks</span>
+          <b>{{ overall_progress.low_score_student.percentage }}%</b>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
     <div class="history-donut-group">
       <div class="history-average-panel">
@@ -117,7 +135,6 @@
         <div class="history-average-donut" style="--average: {{ overall_progress.average_percentage }}%;">
           <span>{{ overall_progress.average_percentage }}%</span>
         </div>
-        <p>{{ 'All selected tests' if all_tests else 'Selected test' }}</p>
       </div>
       <div class="history-average-panel">
         <h3>Passing rate</h3>
@@ -128,24 +145,6 @@
       </div>
       <div class="history-pass-count"><strong>{{ overall_progress.passed_count }} / {{ overall_progress.progress_total_students }}</strong><span>Students passed / total</span></div>
     </div>
-    {% if overall_progress.top_score_student %}
-    <div class="history-score-highlights">
-      <div class="history-top-score history-high-score">
-        <span class="history-top-score-label">Highest score</span>
-        <strong>{{ overall_progress.top_score_student.name }}</strong>
-        <span>{{ overall_progress.top_score_student.marks }} / {{ overall_progress.top_score_student.total_marks }} marks</span>
-        <b>{{ overall_progress.top_score_student.percentage }}%</b>
-      </div>
-      {% if overall_progress.low_score_student %}
-      <div class="history-top-score history-low-score">
-        <span class="history-top-score-label">Lowest score</span>
-        <strong>{{ overall_progress.low_score_student.name }}</strong>
-        <span>{{ overall_progress.low_score_student.marks }} / {{ overall_progress.low_score_student.total_marks }} marks</span>
-        <b>{{ overall_progress.low_score_student.percentage }}%</b>
-      </div>
-      {% endif %}
-    </div>
-    {% endif %}
   </section>
   {% endif %}
   <div class="report-actions">
