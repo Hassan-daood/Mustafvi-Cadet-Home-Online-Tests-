@@ -154,6 +154,7 @@ h2 { font-weight: 700; }
 .result-verdict.pass .result-verdict-percentage .score-box { background: linear-gradient(135deg, #16a34a, #22c55e); border-color: #16a34a; }
 
 .container { width: min(1100px, 92%); margin: 0 auto; }
+body.page-overall_results > main.container { width: min(1320px, 96%); }
 
 /* ---------- Top bar ---------- */
 .topbar {
@@ -391,6 +392,8 @@ button:disabled { opacity: .6; cursor: wait; transform: none; }
 .history-bulk-actions button,
 .history-bulk-actions .action-button { margin: 0; white-space: nowrap; }
 .history-analytics { display: grid; grid-template-columns: minmax(0, 1fr) 210px 210px; gap: 18px; align-items: start; margin: 14px 0 10px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #f8fafc; }
+.overall-history-analytics { grid-template-columns: minmax(0, 1fr) 165px 165px; gap: 12px; }
+.overall-history-analytics .history-progress-panel { grid-column: auto; }
 .history-progress-panel { min-width: 0; }
 .history-progress-panel h3,
 .history-average-panel h3 { margin: 0 0 8px; font-size: .95rem; }
@@ -405,6 +408,10 @@ button:disabled { opacity: .6; cursor: wait; transform: none; }
 .overall-history-analytics .chart-date-label,
 .overall-history-analytics .chart-axis-title { font-size: 12px; }
 .overall-history-analytics .score-bar-count-label { font-size: 13px; }
+.report-test-details { margin: 12px 0 18px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #f8fafc; }
+.report-test-details h3 { margin: 8px 0 4px; color: var(--brand-deep); }
+.report-test-details p { margin: 0 0 8px; color: var(--ink-soft); font-size: .9rem; font-weight: 600; }
+.report-test-details table { margin: 8px 0 14px; }
 .chart-axis-title { fill: var(--ink-soft); font-family: 'Inter', Arial, sans-serif; font-size: 17px; font-weight: 600; }
 .score-bar-count-label { font-size: 19px; }
 .history-progress-line { fill: none; stroke: var(--brand-bright); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
@@ -452,6 +459,13 @@ tr.attempt-highlight { background: #fdf6e0; outline: 2px solid var(--brand-gold)
 .history-pass-summary strong { color: var(--success-dark); font-size: 1.05rem; }
 .history-pass-summary span { color: var(--ink-soft); font-size: .78rem; }
 .score-bar-hint { font-weight: 400; font-size: .78rem; }
+#score-bar-chart .score-count-click { cursor: pointer; }
+#score-bar-chart .score-count-click:hover rect:first-child { opacity: .34; }
+#score-bar-chart .chart-date-label { fill: #475569; font-size: 10px; font-weight: 700; }
+#score-bar-chart .score-dot { fill: var(--student-score-color); stroke: #fff; stroke-width: 2.5; filter: drop-shadow(0 2px 3px rgba(15, 23, 42, .3)); }
+.score-chart-fit { width: 94%; margin: 0 auto; overflow: hidden; }
+.score-chart-fit #score-bar-chart { width: 100%; max-width: 100%; height: auto; }
+.overall-history-analytics .history-average-panel h3 { display: flex; min-height: 3em; align-items: center; justify-content: center; text-align: center; }
 .score-bar-chart { display: flex; flex-direction: column; gap: 6px; }
 .score-bar-chart-plot { display: flex; align-items: flex-end; gap: 14px; height: 170px; padding: 0 6px; border-bottom: 1px solid var(--border-strong); }
 .score-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; margin: 0; padding: 0; background: none; border: none; cursor: pointer; }
@@ -521,12 +535,12 @@ tbody tr:hover { background: rgba(15, 92, 70, .08); }
 .test-overview-table th, .test-overview-table td { text-align: center; vertical-align: middle; }
 .test-overview-table th:first-child, .test-overview-table td:first-child { text-align: left; width: 30%; }
 .exam-test-name { margin: 0 0 6px; color: var(--brand-deep); font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900; }
-.exam-section-name { margin: 0 0 6px; color: var(--ink); font-size: 1.35rem; font-weight: 800; }
-.exam-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; align-items: start; }
-.exam-sections { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-card); }
-.exam-sections h2 { margin: 0 0 12px; font-size: 1rem; }
+.exam-section-name { margin: 0 0 6px; color: var(--ink); font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; }
+.exam-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 22px; align-items: start; }
+.exam-sections { background: linear-gradient(160deg, #fff 0%, #f3f7f6 100%); border: 1px solid #cbd8d4; border-radius: var(--radius-md); padding: 20px; box-shadow: 0 10px 28px -20px rgba(15, 55, 45, .4); }
+.exam-sections h2 { margin: 0 0 14px; font-size: 1.2rem; }
 .exam-sections ol { margin: 0; padding: 0; list-style: none; }
-.exam-sections li { display: flex; justify-content: space-between; gap: 8px; padding: 9px 8px; border-bottom: 1px solid var(--border); font-size: .88rem; }
+.exam-sections li { display: flex; justify-content: space-between; gap: 10px; padding: 12px 10px; border-bottom: 1px solid var(--border); font-size: 1rem; line-height: 1.4; }
 .exam-sections li.current { background: #dbeafe; color: #1d4ed8; font-weight: 700; }
 .exam-sections li.passed { background: #dcfce7; color: #166534; font-weight: 700; }
 .exam-sections li.passed strong { color: var(--success-dark); font-size: .92rem; }
@@ -535,14 +549,14 @@ tbody tr:hover { background: rgba(15, 92, 70, .08); }
 .exam-sections li.failed { color: var(--danger-dark); }
 .next-button { display: block; margin-right: auto; }
 .question-progress {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   margin: 8px 0 0;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #2563eb;
-  color: white;
-  font-size: 1.05rem;
-  font-weight: 800;
+  padding: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 1.65rem;
+  font-weight: 900;
 }
 .timer-box {
   background: linear-gradient(135deg, var(--brand-dark), var(--brand-deep));
@@ -691,7 +705,7 @@ pre {
 .test-stack-item.selected-test .question-actions button { align-self: end; margin: 0; white-space: nowrap; }
 .test-stack-item.selected-test .question-actions { align-self: end; }
 .test-create-form { width: min(760px, 100%); }
-.overall-filter-form { display: grid; grid-template-columns: auto minmax(130px, 1.3fr) auto minmax(130px, 1fr) auto minmax(130px, 1fr) auto minmax(110px, 1fr) auto minmax(110px, 1fr); gap: 8px; align-items: center; }
+.overall-filter-form { position: sticky; top: 78px; z-index: 20; display: grid; grid-template-columns: auto minmax(130px, 1.3fr) auto minmax(130px, 1fr) auto minmax(130px, 1fr) auto minmax(110px, 1fr) auto minmax(110px, 1fr); gap: 8px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 20px rgba(15, 23, 42, .08); }
 .overall-filter-form label { margin: 0; }
 .overall-filter-form select { width: auto; }
 .action-button {
@@ -811,6 +825,9 @@ pre {
   .history-bulk-actions { flex-wrap: wrap; }
   .history-analytics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .history-progress-panel { grid-column: 1 / -1; }
+  .overall-history-analytics { grid-template-columns: minmax(0, 1fr) 145px 145px; gap: 10px; }
+  .overall-history-analytics .history-progress-panel { grid-column: auto; }
+  .overall-history-analytics .history-average-donut { width: 112px; }
   .history-pass-summary { flex-wrap: wrap; }
   .section-settings-form { grid-template-columns: 1fr 1fr; }
   .section-settings-form label:first-child { grid-column: 1 / -1; }
@@ -823,11 +840,12 @@ pre {
 
 @page { margin: 12mm; }
 @media print {
-  body { zoom: 1; background: white; color: black; }
+  body { zoom: 1; background: white; color: black; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .topbar,
   .flash-region,
   .history-roster,
   main > .report-actions,
+  .card > .report-actions,
   main > .card.narrow,
   .history-bulk-actions,
   .attempt-actions,
@@ -837,6 +855,20 @@ pre {
   .attempt-card { break-inside: avoid; margin-bottom: 8px; padding: 8px; border: 1px solid #aaa; box-shadow: none; }
   .history-attempt-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 6px; }
   .history-attempt-summary .score-box { color: black; background: white; border-color: #555; }
+  .overall-filter-form,
+  .overall-report > .report-actions,
+  .history-search-form,
+  .history-results-toolbar .history-bulk-actions,
+  .result-back-bar,
+  #overall-results-table th:last-child,
+  #overall-results-table td:last-child { display: none !important; }
+  .overall-report,
+  .history-results,
+  main > .card:not(.narrow) { break-inside: auto; box-shadow: none; }
+  .history-chart-scroll { overflow: visible; }
+  .overall-filter-form { position: static; box-shadow: none; }
+  #score-bar-chart { width: 100% !important; max-width: 100% !important; }
+  .exam-sections { box-shadow: none; }
 }
 
 /* Keep the two circular diagrams side by side on one line at every width. */
@@ -853,4 +885,20 @@ pre {
 
 @media (min-width: 761px) and (max-width: 1100px) {
   .overall-filter-form { grid-template-columns: auto 1fr auto 1fr auto 1fr; }
+}
+
+/* Overall report keeps its chart beside both summary diagrams. */
+.overall-history-analytics { grid-template-columns: minmax(0, 1fr) 165px 165px; gap: 12px; }
+.overall-history-analytics .history-progress-panel { grid-column: auto; }
+.overall-history-analytics .history-average-panel { padding-top: 10px; }
+.overall-history-analytics .history-average-panel h3 { min-height: 3em; }
+.overall-history-analytics .history-average-donut { width: 150px; }
+.overall-history-analytics .history-pass-count { margin-top: 14px; padding: 10px 14px; }
+.overall-history-analytics .history-pass-count strong { font-size: 1.55rem; }
+.overall-history-analytics .history-pass-count span { font-size: .95rem; }
+.overall-all-tests .history-progress-panel .history-chart-scroll { width: 82%; max-width: 760px; margin-inline: auto; }
+@media (max-width: 980px) {
+  .overall-history-analytics { grid-template-columns: minmax(0, 1fr) 145px 145px; gap: 10px; }
+  .overall-history-analytics .history-average-donut { width: 136px; }
+  .overall-all-tests .history-progress-panel .history-chart-scroll { width: 96%; }
 }

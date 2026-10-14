@@ -35,12 +35,19 @@
     </select>
   </form>
   {% endif %}
+  {% if report_test_details %}<div class="report-test-details">
+    {% for test_info in report_test_details %}<h3>{{ test_info.title }}</h3>
+    <p>All sections · Total marks: {{ test_info.total_marks }} · Passing marks: {{ test_info.passing_marks }} · Passing percentage: {{ '%.2f'|format(test_info.pass_percentage) }}%</p>
+    <table><thead><tr><th>Section</th><th>Total marks</th><th>Passing marks</th><th>Passing percentage</th></tr></thead><tbody>
+      {% for section_info in test_info.sections %}<tr><td>{{ section_info.title }}</td><td>{{ section_info.total_marks }}</td><td>{{ section_info.passing_marks }}</td><td>{{ '%.2f'|format(section_info.pass_percentage) }}%</td></tr>{% endfor %}
+    </tbody></table>{% endfor %}
+  </div>{% endif %}
   {% if report_selected %}
   {% if progress_student %}
   {% include 'student_progress_analytics.html' %}
   {% endif %}
   {% if overall_progress %}
-  <section class="history-analytics overall-history-analytics" aria-label="Overall test progress">
+  <section class="history-analytics overall-history-analytics {{ 'overall-all-tests' if all_tests else 'overall-individual-test' }}" aria-label="Overall test progress">
     <div class="history-progress-panel">
       {% if all_tests %}
       <h3>Overall student score distribution</h3>
@@ -70,33 +77,36 @@
         </svg>
       </div>
       {% else %}
-      <h3>Student score distribution <span class="muted score-bar-hint">(hover a dot for details; click a dot or the student count under a bar)</span></h3>
-      <div class="history-chart-scroll">
-        <svg class="history-progress-chart" viewBox="0 0 {{ overall_progress.dist_chart_width }} {{ overall_progress.dist_chart_height }}" role="img" aria-label="Score distribution chart" id="score-bar-chart">
-          <text class="chart-axis-title" x="15" y="{{ overall_progress.dist_mid_y }}" transform="rotate(-90 15 {{ overall_progress.dist_mid_y }})">% of students</text>
+      <h3>Individual student scores <span class="muted score-bar-hint">(hover a dot for details; click a dot or a colour band count)</span></h3>
+      <div class="score-chart-fit">
+        <svg class="history-progress-chart" viewBox="0 0 {{ overall_progress.web_dist_chart_width }} {{ overall_progress.dist_chart_height }}" role="img" aria-label="Individual student score chart" id="score-bar-chart">
+          <defs>
+            <linearGradient id="band-failed" x1="0" x2="1"><stop offset="0" stop-color="#fff1f2"></stop><stop offset="1" stop-color="#fecdd3"></stop></linearGradient>
+            <linearGradient id="band-passed" x1="0" x2="1"><stop offset="0" stop-color="#f7fee7"></stop><stop offset="1" stop-color="#d9f99d"></stop></linearGradient>
+            <linearGradient id="band-high" x1="0" x2="1"><stop offset="0" stop-color="#ecfdf5"></stop><stop offset="1" stop-color="#a7f3d0"></stop></linearGradient>
+          </defs>
+          <text class="chart-axis-title" x="15" y="{{ overall_progress.dist_mid_y }}" transform="rotate(-90 15 {{ overall_progress.dist_mid_y }})">Student percentage</text>
           {% for tick in overall_progress.dist_chart_ticks %}
-          <line class="chart-grid-line{{ '' if tick.major else ' chart-grid-line-minor' }}" x1="60" y1="{{ tick.y }}" x2="{{ overall_progress.dist_chart_width - 18 }}" y2="{{ tick.y }}"></line>
           <text class="chart-tick-label" x="53" y="{{ tick.y + 4 }}" text-anchor="end">{{ tick.value }}%</text>
           {% endfor %}
-          {% for bucket in overall_progress.score_distribution %}
-          <g class="bar-hover-group">
-            <rect class="score-bar-rect bar-{{ loop.index0 }}" x="{{ bucket.x }}" y="{{ bucket.y }}" width="{{ bucket.width }}" height="{{ bucket.height }}"></rect>
-            <g class="chart-tooltip"><rect x="{{ bucket.tip.x }}" y="{{ bucket.tip.y }}" width="{{ bucket.tip.width }}" height="{{ bucket.tip.height }}" rx="5"></rect><text x="{{ bucket.tip.text_x }}" y="{{ bucket.tip.text_y }}" text-anchor="middle">{{ bucket.tip.text }}</text></g>
+          {% for bucket in overall_progress.web_score_distribution %}
+          {% if bucket.dot %}
+          <g class="score-dot-group" data-attempt-id="{{ bucket.attempt_id }}" onclick="selectScoreDot(this)" onmouseenter="bringToFront(this)" onmouseleave="this.classList.remove('suppress-hover')">
+            <circle class="score-dot" cx="{{ bucket.cx }}" cy="{{ bucket.cy }}" r="6" style="--student-score-color: {{ bucket.color }}"></circle>
+            <circle class="chart-hit" cx="{{ bucket.cx }}" cy="{{ bucket.cy }}" r="10"></circle>
+            <g class="chart-tooltip"><rect x="{{ bucket.tip.x }}" y="{{ bucket.tip.y }}" width="{{ bucket.tip.width }}" height="{{ bucket.tip.height }}" rx="5"></rect>{% for line in bucket.tip.lines %}{% if line.text %}<text x="{{ bucket.tip.text_x }}" y="{{ line.y }}" text-anchor="middle">{{ line.text }}</text>{% endif %}{% endfor %}</g>
           </g>
-          {% for dot in bucket.dots %}
-          <g class="score-dot-group" data-attempt-id="{{ dot.attempt_id }}" onclick="selectScoreDot(this)" onmouseenter="bringToFront(this)" onmouseleave="this.classList.remove('suppress-hover')">
-            <circle class="score-dot" cx="{{ dot.cx }}" cy="{{ dot.cy }}" r="4"></circle>
-            <circle class="chart-hit" cx="{{ dot.cx }}" cy="{{ dot.cy }}" r="7"></circle>
-            <g class="chart-tooltip"><rect x="{{ dot.tip.x }}" y="{{ dot.tip.y }}" width="{{ dot.tip.width }}" height="{{ dot.tip.height }}" rx="5"></rect>{% for line in dot.tip.lines %}{% if line.text %}<text x="{{ dot.tip.text_x }}" y="{{ line.y }}" text-anchor="middle">{{ line.text }}</text>{% endif %}{% endfor %}</g>
-          </g>
-          {% endfor %}
+          <text class="chart-date-label" x="{{ bucket.cx }}" y="{{ overall_progress.dist_baseline + 20 }}" text-anchor="middle">{{ bucket.number }}</text>
+          {% else %}
           <g class="score-count-click" data-min="{{ bucket.min }}" data-max="{{ bucket.max }}" onclick="filterByBand(this)" onmouseleave="this.classList.remove('suppress-hover')">
-            <rect class="chart-hit" x="{{ bucket.label_x - 18 }}" y="{{ overall_progress.dist_baseline + 4 }}" width="36" height="22"></rect>
-            <text class="chart-date-label score-bar-count-label" x="{{ bucket.label_x }}" y="{{ overall_progress.dist_baseline + 20 }}" text-anchor="middle">{{ bucket.count }}</text>
+            <rect x="{{ bucket.x }}" y="{{ bucket.y }}" width="{{ bucket.width }}" height="{{ bucket.height }}" fill="{{ ['url(#band-failed)', 'url(#band-passed)', 'url(#band-high)'][loop.index0] }}"></rect>
+            <rect class="chart-hit" x="{{ bucket.x }}" y="{{ bucket.y }}" width="{{ bucket.width }}" height="{{ bucket.height }}"></rect>
+            <text x="{{ bucket.label_x }}" y="{{ bucket.label_y }}" text-anchor="end" fill="{{ bucket.color }}" font-size="14" font-weight="800">{{ {'Fail':'Failed','Pass':'Passed','High score':'High scorer'}[bucket.label] }} · {{ bucket.count }}</text>
           </g>
-          <text class="chart-date-label" x="{{ bucket.label_x }}" y="{{ overall_progress.dist_baseline + 40 }}" text-anchor="middle">{{ bucket.label }}</text>
+          {% endif %}
           {% endfor %}
-          <text class="chart-axis-title" x="{{ overall_progress.dist_chart_width - 18 }}" y="{{ overall_progress.dist_baseline + 84 }}" text-anchor="end">Total students: {{ overall_progress.progress_total_students }}</text>
+          <text class="chart-axis-title" x="{{ overall_progress.web_dist_chart_width / 2 }}" y="{{ overall_progress.dist_baseline + 40 }}" text-anchor="middle">Student number</text>
+          <text class="chart-axis-title" x="{{ overall_progress.web_dist_chart_width - 14 }}" y="{{ overall_progress.dist_baseline + 72 }}" text-anchor="end">Total students: {{ overall_progress.progress_total_students }}</text>
         </svg>
       </div>
       {% endif %}
@@ -120,7 +130,7 @@
   {% endif %}
   <div class="report-actions">
     <button class="action-button" type="button" onclick="window.location.href='{{ url_for('download_overall_results_word', test_id='all' if all_tests else selected_test.id if selected_test else '', start_date=start_date, end_date=end_date) }}'">Download overall Word file</button>
-    <button class="action-button" type="button" onclick="window.location.href='{{ url_for('download_overall_results_excel') }}'">Download all marks Excel</button>
+    <button class="action-button" type="button" onclick="window.location.href='{{ url_for('download_overall_results_excel', test_id='all' if all_tests else selected_test.id if selected_test else '') }}'">Download {{ 'all conducted tests' if all_tests else 'this test' }} Excel</button>
     <button type="button" onclick="window.print()">Print overall result</button>
   </div>
 

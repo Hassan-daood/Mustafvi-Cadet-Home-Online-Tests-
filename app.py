@@ -1,5 +1,6 @@
 import os
 import re
+import hmac
 import uuid
 import json
 import mimetypes
@@ -334,6 +335,35 @@ def test_marks_summary(test):
     }
 
 
+def report_test_details(test):
+    if not test:
+        return None
+    summary = test_marks_summary(test)
+    return {
+        "title": test.title,
+        "total_marks": summary["total_marks"],
+        "passing_marks": summary["passing_marks"],
+        "pass_percentage": summary["pass_percentage"],
+        "sections": [{
+            "title": section.title,
+            "total_marks": section_total_marks(section),
+            "passing_marks": get_section_passing_marks(section),
+            "pass_percentage": section.pass_percentage,
+        } for section in ordered_sections(test.id)],
+    }
+
+
+def unique_attempt_tests(rows):
+    tests = []
+    seen_ids = set()
+    for row in rows:
+        test = row["attempt"].test
+        if test and test.id not in seen_ids:
+            seen_ids.add(test.id)
+            tests.append(test)
+    return tests
+
+
 def test_score(attempt):
     total = Question.query.join(Section).filter(Section.test_id == attempt.test_id).count()
     correct = (
@@ -428,6 +458,103 @@ def admin_required(view):
     return wrapped
 
 
+# The standard class list. It is shown on the student dashboard and is kept in the
+# database; deleting test history never removes these students.
+CLASS_ROSTER = [
+    ("1", "Fahad Majeed", "8th"),
+    ("2", "M. Irfan", "8th"),
+    ("3", "Ali Hassan", "8th"),
+    ("4", "Sultan Nabeel", "8th"),
+    ("5", "M. Ali Ahsan", "8th"),
+    ("6", "Hassan Rizwan", "8th"),
+    ("7", "Ali Ahmad", "8th"),
+    ("8", "Abdul Qadir", "8th"),
+    ("9", "M. Shahzaib Asad", "8th"),
+    ("10", "M. Uabid Moeen", "8th"),
+    ("11", "Muazam Ali", "8th"),
+    ("12", "Shaheryar Ghuman", "8th"),
+    ("13", "M. Ayaz", "8th"),
+    ("14", "Eissa Bin Rashid", "8th"),
+    ("15", "Murad Abbas", "8th"),
+    ("16", "Abdul Raheem", "8th"),
+    ("17", "Abdul Hadi (Tariq)", "8th"),
+    ("18", "M. Asad", "8th"),
+    ("19", "M. Huzaifa Fareed", "8th"),
+    ("20", "Zain Raza Atta", "7th"),
+    ("21", "Noor Aalam", "7th"),
+    ("22", "M. Mahad Pahat", "7th"),
+    ("23", "Abdullah Sabir", "7th"),
+    ("24", "Abdul Muqeet", "7th"),
+    ("25", "Ibrahim Asif", "7th"),
+    ("26", "M. Musa", "7th"),
+    ("27", "M. Ali Ayaz (new)", "7th"),
+    ("28", "Naeem Akram", "7th"),
+    ("29", "Junaid Ali", "7th"),
+    ("30", "M. Fahad Ch.", "7th"),
+    ("31", "Taha Ali", "7th"),
+    ("32", "Abubakar", "7th"),
+    ("33", "Usman", "7th"),
+    ("34", "M. Zeeshan Mughal", "7th"),
+]
+
+
+def restore_class_roster():
+    """Add class-list students that are missing. Never edits or removes anyone."""
+    existing_names = set()
+    existing_rolls = set()
+    for student in Student.query.all():
+        existing_names.add(student.name.strip().casefold())
+        existing_rolls.add(student.roll_no.strip())
+    added = []
+    skipped = []
+    for roll_no, name, class_name in CLASS_ROSTER:
+        if name.casefold() in existing_names:
+            continue
+        if roll_no in existing_rolls:
+            skipped.append((roll_no, name))
+            continue
+        db.session.add(Student(name=name, roll_no=roll_no, class_name=class_name))
+        added.append((roll_no, name))
+    if added:
+        db.session.commit()
+    return added, skipped
+
+
+with app.app_context():
+    # If the student table is empty (for example after the old "Delete all history"
+    # removed everyone) the standard class list is loaded again automatically.
+    if Student.query.count() == 0:
+        restore_class_roster()
+
+
+STUDENT_UNLOCK_MINUTES = int(os.environ.get("STUDENT_UNLOCK_MINUTES", "30"))
+
+
+def valid_student_password(password):
+    """STUDENT_PASSWORD (if set) opens the student pages; otherwise the admin password does."""
+    student_password = os.environ.get("STUDENT_PASSWORD", "")
+    if student_password:
+        return hmac.compare_digest(password.encode("utf-8"), student_password.encode("utf-8"))
+    return valid_admin_password(password)
+
+
+def lock_student_access():
+    session.pop("student_access_unlocked", None)
+    session.pop("student_access_unlocked_at", None)
+
+
+def student_access_ok():
+    """True only while the student password was entered recently and not yet used to start a test."""
+    if not session.get("student_access_unlocked"):
+        return False
+    unlocked_at = session.get("student_access_unlocked_at")
+    now = datetime.now(timezone.utc).timestamp()
+    if unlocked_at is None or now - unlocked_at > STUDENT_UNLOCK_MINUTES * 60:
+        lock_student_access()
+        return False
+    return True
+
+
 def valid_admin_password(password):
     if ADMIN_PASSWORD_FILE.exists():
         return check_password_hash(ADMIN_PASSWORD_FILE.read_text(encoding="utf-8").strip(), password)
@@ -436,7 +563,7 @@ def valid_admin_password(password):
 
 @app.get("/")
 def index():
-    if not session.get("student_access_unlocked"):
+    if not student_access_ok():
         return redirect(url_for("student_login"))
     tests = Test.query.order_by(Test.created_at.asc(), Test.id.asc()).all()
     selected_test_id = request.args.get("test_id", type=int)
@@ -451,13 +578,14 @@ def index():
 @app.route("/student/login", methods=["GET", "POST"])
 def student_login():
     if request.method == "POST":
-        if not valid_admin_password(request.form.get("password", "")):
+        if not valid_student_password(request.form.get("password", "")):
             flash("Incorrect password.", "error")
             return redirect(url_for("student_login"))
         session["student_access_unlocked"] = True
+        session["student_access_unlocked_at"] = datetime.now(timezone.utc).timestamp()
         return redirect(url_for("index"))
 
-    session.pop("student_access_unlocked", None)
+    lock_student_access()
     return render_template("student_landing.html", password_gate=True)
 
 
@@ -622,7 +750,7 @@ def delete_student(student_id):
 
 @app.post("/student/setup")
 def prepare_student_dashboard():
-    if not session.get("student_access_unlocked"):
+    if not student_access_ok():
         return redirect(url_for("student_login"))
     test_id = request.form.get("test_id", type=int)
     failure_mode = request.form.get("section_failure_mode", "stop")
@@ -637,7 +765,7 @@ def prepare_student_dashboard():
 
 @app.get("/student/dashboard")
 def student_dashboard():
-    if not session.get("student_access_unlocked"):
+    if not student_access_ok():
         return redirect(url_for("student_login"))
     tests = Test.query.order_by(Test.created_at.asc()).all()
     selected_test_id = request.args.get("test_id", type=int) or session.get("student_setup_test_id")
@@ -678,7 +806,7 @@ def student_dashboard():
 
 
 CHART_HEIGHT = 216
-DIST_CHART_HEIGHT = 260
+DIST_CHART_HEIGHT = 360
 
 
 def chart_percentage_ticks(plot_top, plot_height):
@@ -838,72 +966,67 @@ def build_overall_progress_analytics(student_rows, selected_test, all_tests):
             per_test_rates.append(test_passed / test_total * 100 if test_total else 0)
         tests_average_passing_rate = round(sum(per_test_rates) / len(per_test_rates), 1) if per_test_rates else 0
 
-    # Score-distribution bars (individual-test report): 5 bands on the X-axis,
-    # bar height on a real 0-100% Y-axis scale (percentage of all students in
-    # that band), student count printed just below each bar.
-    bucket_bounds = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100)]
-    bucket_counts = []
-    for lo, hi in bucket_bounds:
-        if hi == 100:
-            count = sum(1 for row in progress_rows if lo <= row["score"] <= hi)
-        else:
-            count = sum(1 for row in progress_rows if lo <= row["score"] < hi)
-        bucket_counts.append(count)
-
-    dist_chart_width = 420
+    # Individual-test graph: one numbered X position and one actual-score dot per student.
     dist_plot_left, dist_plot_right, dist_plot_top, dist_plot_bottom = 60, 18, 18, 92
-    dist_plot_width = dist_chart_width - dist_plot_left - dist_plot_right
     dist_plot_height = DIST_CHART_HEIGHT - dist_plot_top - dist_plot_bottom
     dist_baseline = dist_plot_top + dist_plot_height
+    dist_pass_percentage = test_marks_summary(selected_test)["pass_percentage"] if selected_test else PASS_PERCENTAGE
+    pass_midpoint = dist_pass_percentage + (100 - dist_pass_percentage) / 2
+    dist_chart_width = max(700, dist_plot_left + dist_plot_right + max(total, 1) * 48)
+    dist_plot_width = dist_chart_width - dist_plot_left - dist_plot_right
     dist_chart_ticks = chart_percentage_ticks(dist_plot_top, dist_plot_height)
-    bar_slot = dist_plot_width / len(bucket_bounds)
-    bar_width = bar_slot * 0.7
-    rows_by_bucket = [[] for _ in bucket_bounds]
-    for row in progress_rows:
-        for bucket_index, (lo, hi) in enumerate(bucket_bounds):
-            if (lo <= row["score"] < hi) or (hi == 100 and lo <= row["score"] <= hi):
-                rows_by_bucket[bucket_index].append(row)
-                break
     score_distribution = []
-    for index, ((lo, hi), count) in enumerate(zip(bucket_bounds, bucket_counts)):
-        percent = round(count / total * 100, 1) if total else 0
-        slot_centre = dist_plot_left + bar_slot * (index + 0.5)
-        bar_height = (percent / 100) * dist_plot_height
-        bar_left = slot_centre - bar_width / 2
-        bucket_rows = sorted(rows_by_bucket[index], key=lambda r: (r["score"], r["attempt"].student.name.casefold()))
-        dot_columns = 3 if len(bucket_rows) <= 24 else 4
-        dots = []
-        for dot_index, dot_row in enumerate(bucket_rows):
-            dot_x = bar_left + bar_width * (dot_index % dot_columns + 1) / (dot_columns + 1)
-            # Dot height follows the student's own percentage inside the bar's band
-            # (higher marks = higher dot). It never changes the bar's height.
-            band_fraction = min(max((dot_row["score"] - lo) / (hi - lo), 0), 1)
-            usable_height = max(bar_height, 26)
-            dot_y = dist_baseline - 7 - band_fraction * (usable_height - 14)
-            dots.append({
-                "cx": round(dot_x, 1),
-                "cy": round(dot_y, 1),
-                "attempt_id": dot_row["attempt"].id,
-                "tip": chart_tooltip_lines(
-                    [dot_row["attempt"].student.name, "", f"{dot_row['correct']} / {dot_row['total']}", "", f"{dot_row['score']}%"],
-                    dot_x, dot_y - 100, dist_chart_width,
-                ),
-            })
+    score_bands = []
+    bands = [(0, dist_pass_percentage), (dist_pass_percentage, pass_midpoint), (pass_midpoint, 100)]
+    band_colors = ["#e11d48", "#84cc16", "#047857"]
+    for index, ((lo, hi), color) in enumerate(zip(bands, band_colors)):
+        count = sum(1 for row in progress_rows if lo <= row["score"] < hi or (hi == 100 and row["score"] == 100))
+        y_top = dist_plot_top + (100 - hi) * dist_plot_height / 100
+        y_bottom = dist_plot_top + (100 - lo) * dist_plot_height / 100
+        score_bands.append({
+            "x": dist_plot_left, "y": round(y_top, 2), "width": dist_plot_width,
+            "height": round(y_bottom - y_top, 2), "color": color, "count": count,
+            "label_y": round((y_top + y_bottom) / 2 + 4, 2),
+            "label": ["Fail", "Pass", "High score"][index], "min": lo, "max": hi,
+        })
+        score_distribution.append(score_bands[-1])
+    for index, row in enumerate(progress_rows):
+        score = max(0, min(100, row["score"]))
+        x = dist_plot_left + (dist_plot_width / 2 if total == 1 else index * dist_plot_width / (total - 1))
+        y = dist_plot_top + (100 - score) * dist_plot_height / 100
         score_distribution.append({
-            "dots": dots,
-            "label": f"{lo}-{hi}%",
-            "min": lo,
-            "max": hi,
-            "count": count,
-            "percent": percent,
-            "x": round(bar_left, 2),
-            "width": round(bar_width, 2),
-            "y": round(dist_plot_top + dist_plot_height - bar_height, 2),
-            "height": round(max(bar_height, 2), 2),
-            "label_x": round(slot_centre, 2),
-            "tip": chart_tooltip(
-                f"{percent}%",
-                slot_centre, dist_plot_top + dist_plot_height - bar_height - 32, dist_chart_width,
+            "dot": True, "cx": round(x, 1), "cy": round(y, 1),
+            "attempt_id": row["attempt"].id, "number": index + 1,
+            "color": band_colors[0] if score < dist_pass_percentage else band_colors[1] if score < pass_midpoint else band_colors[2],
+            "tip": chart_tooltip_lines(
+                [row["attempt"].student.name, "", f"{row['correct']} / {row['total']}", "", f"{row['score']}%"],
+                x, y - 100, dist_chart_width,
+            ),
+        })
+
+    # Website chart is sized to its card so all students and the in-chart labels
+    # fit without horizontal scrolling. Keep the document chart dimensions above.
+    web_dist_chart_width = 760
+    web_dist_plot_right = 135
+    web_dist_plot_width = web_dist_chart_width - dist_plot_left - web_dist_plot_right
+    web_score_distribution = []
+    for item in score_distribution:
+        if not item.get("dot"):
+            web_score_distribution.append({
+                **item,
+                "width": web_dist_plot_width,
+                "label_x": web_dist_chart_width - 14,
+            })
+            continue
+        index = item["number"] - 1
+        x = dist_plot_left + (web_dist_plot_width / 2 if total == 1 else index * web_dist_plot_width / (total - 1))
+        y = item["cy"]
+        web_score_distribution.append({
+            **item,
+            "cx": round(x, 1),
+            "tip": chart_tooltip_lines(
+                [progress_rows[index]["attempt"].student.name, "", f"{progress_rows[index]['correct']} / {progress_rows[index]['total']}", "", f"{progress_rows[index]['score']}%"],
+                x, y - 100, web_dist_chart_width,
             ),
         })
 
@@ -977,6 +1100,9 @@ def build_overall_progress_analytics(student_rows, selected_test, all_tests):
         "passed_percentage": round(passed_count / total * 100, 1) if total else 0,
         "tests_average_passing_rate": tests_average_passing_rate,
         "score_distribution": score_distribution,
+        "score_bands": score_bands,
+        "web_score_distribution": web_score_distribution,
+        "web_dist_chart_width": web_dist_chart_width,
         "dist_chart_width": dist_chart_width,
         "dist_chart_height": DIST_CHART_HEIGHT,
         "dist_baseline": dist_baseline,
@@ -1086,6 +1212,8 @@ def history():
     )
 
     progress_analytics = build_student_progress_analytics(attempt_rows)
+    history_tests = unique_attempt_tests(attempt_rows)
+    history_test_details = [report_test_details(test) for test in history_tests]
 
     return render_template(
         "history.html",
@@ -1094,6 +1222,7 @@ def history():
         tests=tests,
         selected_test=selected_test,
         attempt_rows=attempt_rows,
+        report_test_details=history_test_details,
         searched=searched,
         start_date=start_date,
         end_date=end_date,
@@ -1246,19 +1375,20 @@ def draw_line_chart(canvas, ox, oy, analytics, label_key, x_title, y_title):
 def draw_distribution_chart(canvas, ox, oy, analytics):
     width = analytics["dist_chart_width"]
     baseline = analytics["dist_baseline"]
-    draw_percentage_axes(canvas, ox, oy, analytics["dist_chart_ticks"], width, "% of students", analytics["dist_mid_y"])
-    for index, bucket in enumerate(analytics["score_distribution"]):
-        canvas.rect(
-            ox + bucket["x"], oy + bucket["y"],
-            ox + bucket["x"] + bucket["width"], oy + bucket["y"] + bucket["height"],
-            fill=SCORE_BAR_COLOURS[index % len(SCORE_BAR_COLOURS)],
-        )
-        for dot in bucket["dots"]:
-            canvas.circle(ox + dot["cx"], oy + dot["cy"], 4, fill="FFFFFF", outline=WORD_DARK, width=1.5)
-        canvas.text(ox + bucket["label_x"], oy + baseline + 20, bucket["count"], 13, "4B5563", bold=True, anchor="ms")
-        canvas.text(ox + bucket["label_x"], oy + baseline + 40, bucket["label"], 12, WORD_MUTED, anchor="ms")
+    canvas.vertical_text(ox + 15, oy + analytics["dist_mid_y"], "Student percentage", 12, "4B5563")
+    for tick in analytics["dist_chart_ticks"]:
+        canvas.text(ox + 53, oy + tick["y"] + 3.5, f"{tick['value']}%", 10, WORD_MUTED, anchor="rs")
+    band_names = {"Fail": "Failed", "Pass": "Passed", "High score": "High scorer"}
+    for band in (item for item in analytics["score_distribution"] if not item.get("dot")):
+        fill = "FFF1F2" if band["label"] == "Fail" else "F7FEE7" if band["label"] == "Pass" else "ECFDF5"
+        canvas.rect(ox + band["x"], oy + band["y"], ox + band["x"] + band["width"], oy + band["y"] + band["height"], fill=fill)
+        canvas.text(ox + band["x"] + band["width"] - 12, oy + band["label_y"], f"{band_names[band['label']]} · {band['count']} students", 15, band["color"][1:], bold=True, anchor="rs")
+    for point in (item for item in analytics["score_distribution"] if item.get("dot")):
+        canvas.circle(ox + point["cx"], oy + point["cy"], 6, fill=point["color"][1:], outline="FFFFFF", width=2)
+        canvas.text(ox + point["cx"], oy + baseline + 20, point["number"], 11, WORD_MUTED, bold=True, anchor="ms")
+    canvas.text(ox + width / 2, oy + baseline + 40, "Student number", 12, "4B5563", bold=True, anchor="ms")
     canvas.text(
-        ox + width - 18, oy + baseline + 84,
+        ox + width - 18, oy + baseline + 72,
         f"Total students: {analytics['progress_total_students']}", 12, "4B5563", bold=True, anchor="rs",
     )
 
@@ -1512,6 +1642,31 @@ def word_heading(document, text, size=15, before=6, after=4, colour="111827"):
     return paragraph
 
 
+def word_test_details(document, tests):
+    """Add the test and section mark requirements used by non-result report exports."""
+    seen = set()
+    for test in tests:
+        if not test or test.id in seen:
+            continue
+        seen.add(test.id)
+        summary = test_marks_summary(test)
+        word_heading(document, test.title, size=13, before=8, after=4)
+        usable = word_usable_width(document)
+        widths = scale_widths([2.2, 0.8, 1.0, 1.1, 1.0], usable)
+        table = word_table(document, ["Section", "Total marks", "Passing marks", "Passing %", "Status"], widths)
+        for section in ordered_sections(test.id):
+            cells = word_add_row(table, widths)
+            total_marks = section_total_marks(section)
+            passing_marks = get_section_passing_marks(section)
+            values = [section.title, total_marks, passing_marks, f"{section.pass_percentage:g}%", "Section pass"]
+            for index, value in enumerate(values):
+                word_cell_text(cells[index], value, size=9)
+        cells = word_add_row(table, widths)
+        values = ["TEST TOTAL", summary["total_marks"], summary["passing_marks"], f"{summary['pass_percentage']:.2f}%", "Overall pass"]
+        for index, value in enumerate(values):
+            word_cell_text(cells[index], value, size=9, bold=True, colour=WORD_GREEN, fill=WORD_PASS_BG)
+
+
 def word_response(buffer, filename):
     buffer.seek(0)
     return send_file(
@@ -1594,6 +1749,7 @@ def attempt_section_reports(attempt):
             "title": section_attempt.section.title,
             "pass_percentage": section_attempt.section.pass_percentage if section_attempt.section else PASS_PERCENTAGE,
             "total": len(questions),
+            "passing_marks": get_section_passing_marks(section_attempt.section) if section_attempt.section else 0,
             "answered": answered,
             "correct": correct,
             "percentage": section_attempt.percentage if section_attempt.percentage is not None else 0,
@@ -1642,6 +1798,7 @@ def download_history_word():
     analytics = build_student_progress_analytics(attempt_rows)
     document = word_new_document(landscape=True)
     usable = word_usable_width(document)
+    word_test_details(document, [row["attempt"].test for row in attempt_rows])
 
     if analytics["progress_student"]:
         panel = render_analytics_panel(
@@ -1813,6 +1970,10 @@ def overall_results():
 
     selected_student = None
     overall_progress = build_overall_progress_analytics(student_rows, selected_test, all_tests) if report_selected else None
+    overall_tests = unique_attempt_tests(student_rows)
+    if selected_test and selected_test not in overall_tests:
+        overall_tests = [selected_test]
+    overall_test_details = [report_test_details(test) for test in overall_tests]
     progress_analytics = build_student_progress_analytics(student_rows) if selected_student else build_student_progress_analytics([])
     return render_template(
         "overall_results.html",
@@ -1831,6 +1992,7 @@ def overall_results():
         sort_order=sort_order,
         order_by=order_by,
         overall_progress=overall_progress,
+        report_test_details=overall_test_details,
         **progress_analytics,
     )
 
@@ -1890,6 +2052,10 @@ def download_overall_results_word():
     word_run(eyebrow, "Overall Result Report", size=9, colour=WORD_INK)
     test_title = "All Tests" if all_tests else (selected_test.title if selected_test else "Overall Results")
     word_heading(document, test_title, size=22, before=2, after=8)
+    word_test_details(
+        document,
+        [row["attempt"].test for row in student_rows] if all_tests else [selected_test],
+    )
 
     if student_rows:
         analytics = build_overall_progress_analytics(student_rows, selected_test, all_tests)
@@ -1950,69 +2116,112 @@ def download_overall_results_word():
 @app.get("/admin/overall-results/download-excel")
 @admin_required
 def download_overall_results_excel():
-    tests = Test.query.order_by(Test.created_at.asc(), Test.id.asc()).all()
+    selected_value = request.args.get("test_id", "")
+    selected_test_id = request.args.get("test_id", type=int)
+    all_tests = selected_value == "all" or not selected_value
     attempts = (
         Attempt.query.filter(Attempt.save_history.is_(True))
         .order_by(Attempt.started_at.desc())
         .all()
     )
-    test_totals = {
-        test.id: sum(len(section.questions) for section in test.sections)
-        for test in tests
-    }
+    if selected_test_id:
+        attempts = [attempt for attempt in attempts if attempt.test_id == selected_test_id]
+        test_ids = [selected_test_id]
+    elif all_tests:
+        test_ids = list(dict.fromkeys(attempt.test_id for attempt in attempts if attempt.test_id))
+    else:
+        test_ids = []
+    tests = [db.session.get(Test, test_id) for test_id in test_ids]
+    tests = [test for test in tests if test]
+    conducted_ids = {attempt.test_id for attempt in attempts}
+    if all_tests:
+        tests = [test for test in tests if test.id in conducted_ids]
+
     student_results = {}
     for attempt in attempts:
         student_key = (attempt.student.name, attempt.student.roll_no)
-        student_results.setdefault(student_key, {})
-        if attempt.test_id in student_results[student_key]:
+        results_for_student = student_results.setdefault(student_key, {})
+        if attempt.test_id in results_for_student:
             continue
-        student_results[student_key][attempt.test_id] = sum(
-            response.is_correct
-            for response in Response.query.filter_by(attempt_id=attempt.id).all()
-        )
+        total, correct, score = test_score(attempt)
+        results_for_student[attempt.test_id] = {
+            "correct": correct, "total": total, "score": score,
+            "passed": score >= test_marks_summary(attempt.test)["pass_percentage"],
+        }
 
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "All Test Marks"
-    sheet["A1"] = "Student Name"
-    sheet["B1"] = "Roll Number"
-    sheet["A1"].font = Font(bold=True, color="FFFFFF")
-    sheet["B1"].font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="166534")
-    total_fill = PatternFill("solid", fgColor="DCFCE7")
-    for cell in (sheet["A1"], sheet["B1"]):
+    sheet.title = "Test Marks"
+    header_fill = PatternFill("solid", fgColor="123B35")
+    meta_fill = PatternFill("solid", fgColor="E8F3EF")
+    subheader_fill = PatternFill("solid", fgColor="DCE9E5")
+    pass_fill = PatternFill("solid", fgColor="DCFCE7")
+    fail_fill = PatternFill("solid", fgColor="FEE2E2")
+    white_bold = Font(bold=True, color="FFFFFF")
+    sheet.merge_cells("A1:B2")
+    sheet["A1"] = "Student"
+    for cell in (sheet["A1"], sheet["B1"], sheet["A2"], sheet["B2"]):
         cell.fill = header_fill
+        cell.font = white_bold
         cell.alignment = Alignment(horizontal="center", vertical="center")
+    for column in (1, 2):
+        sheet.cell(row=3, column=column, value="Name" if column == 1 else "Roll number")
+        sheet.cell(row=3, column=column).fill = subheader_fill
+        sheet.cell(row=3, column=column).font = Font(bold=True, color="123B35")
+        sheet.cell(row=3, column=column).alignment = Alignment(horizontal="center")
 
-    for column_index, test in enumerate(tests, start=3):
-        name_cell = sheet.cell(row=1, column=column_index, value=test.title)
-        total_cell = sheet.cell(row=2, column=column_index, value=f"Total Marks: {test_totals[test.id]}")
-        name_cell.font = Font(bold=True, color="FFFFFF")
-        name_cell.fill = header_fill
-        total_cell.font = Font(bold=True)
-        total_cell.fill = total_fill
-        name_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        total_cell.alignment = Alignment(horizontal="center")
+    test_columns = {}
+    for test_index, test in enumerate(tests):
+        first_col = 3 + test_index * 3
+        last_col = first_col + 2
+        test_columns[test.id] = first_col
+        sheet.merge_cells(start_row=1, start_column=first_col, end_row=1, end_column=last_col)
+        title_cell = sheet.cell(row=1, column=first_col, value=test.title)
+        title_cell.font = white_bold
+        title_cell.fill = header_fill
+        title_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        summary = test_marks_summary(test)
+        detail = f"{len(test.sections)} sections  ·  Total {summary['total_marks']}  ·  Passing {summary['passing_marks']} ({summary['pass_percentage']:.2f}%)"
+        sheet.merge_cells(start_row=2, start_column=first_col, end_row=2, end_column=last_col)
+        detail_cell = sheet.cell(row=2, column=first_col, value=detail)
+        detail_cell.fill = meta_fill
+        detail_cell.font = Font(bold=True, color="123B35", size=9)
+        detail_cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        for offset, label in enumerate(("Marks", "Percentage", "Status")):
+            cell = sheet.cell(row=3, column=first_col + offset, value=label)
+            cell.fill = subheader_fill
+            cell.font = Font(bold=True, color="123B35")
+            cell.alignment = Alignment(horizontal="center")
 
-    sheet["A2"] = ""
-    sheet["B2"] = ""
-    for cell in (sheet["A2"], sheet["B2"]):
-        cell.fill = total_fill
-
-    for row_index, (student, results) in enumerate(sorted(student_results.items()), start=3):
+    ordered_students = sorted(student_results.items(), key=lambda item: (
+        (0, int(item[0][1])) if item[0][1].strip().isdigit() else (1, item[0][1].casefold()),
+        item[0][0].casefold(),
+    ))
+    for row_index, (student, results) in enumerate(ordered_students, start=4):
         sheet.cell(row=row_index, column=1, value=student[0])
         sheet.cell(row=row_index, column=2, value=student[1])
-        for column_index, test in enumerate(tests, start=3):
-            value = results.get(test.id, "-")
-            sheet.cell(row=row_index, column=column_index, value=value)
+        for test in tests:
+            first_col = test_columns[test.id]
+            result = results.get(test.id)
+            if not result:
+                continue
+            values = [f"{result['correct']} / {result['total']}", result["score"], "PASS" if result["passed"] else "FAIL"]
+            for offset, value in enumerate(values):
+                cell = sheet.cell(row=row_index, column=first_col + offset, value=value)
+                cell.fill = pass_fill if result["passed"] else fail_fill
+                cell.font = Font(color="166534" if result["passed"] else "B91C1C", bold=True)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            sheet.cell(row=row_index, column=first_col + 1).number_format = '0.00"%"'
 
-    sheet.freeze_panes = "C3"
-    sheet.auto_filter.ref = sheet.dimensions
+    sheet.freeze_panes = "C4"
+    sheet.auto_filter.ref = f"A3:{get_column_letter(max(2, 2 + len(tests) * 3))}{max(3, sheet.max_row)}"
     sheet.column_dimensions["A"].width = 28
-    sheet.column_dimensions["B"].width = 18
-    for column_index in range(3, len(tests) + 3):
-        sheet.column_dimensions[get_column_letter(column_index)].width = 22
-    sheet.row_dimensions[1].height = 36
+    sheet.column_dimensions["B"].width = 16
+    for column_index in range(3, 3 + len(tests) * 3):
+        sheet.column_dimensions[get_column_letter(column_index)].width = 15
+    sheet.row_dimensions[1].height = 32
+    sheet.row_dimensions[2].height = 30
+    sheet.row_dimensions[3].height = 24
 
     buffer = BytesIO()
     workbook.save(buffer)
@@ -2020,7 +2229,7 @@ def download_overall_results_excel():
     return send_file(
         buffer,
         as_attachment=True,
-        download_name="all_students_all_tests_marks.xlsx",
+        download_name=(f"{tests[0].title[:48]}_marks.xlsx" if selected_test_id and tests else "all_conducted_tests_marks.xlsx"),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -2051,7 +2260,7 @@ def delete_all_history():
     Response.query.delete(synchronize_session=False)
     SectionAttempt.query.delete(synchronize_session=False)
     Attempt.query.delete(synchronize_session=False)
-    Student.query.delete(synchronize_session=False)
+    # Students are NOT deleted: the class list on the student dashboard must stay.
     db.session.commit()
     session.pop("attempt_id", None)
     session.pop("student_id", None)
@@ -2070,7 +2279,7 @@ def start_exam():
     )
     selected_test = db.session.get(Test, test_id)
     sections = ordered_sections(test_id) if selected_test else []
-    if not session.get("student_access_unlocked"):
+    if not student_access_ok():
         flash("Enter the student password before starting a test.", "error")
         return redirect(url_for("student_login"))
     student = Student.query.filter_by(roll_no=roll_no.strip()).first()
@@ -2099,6 +2308,7 @@ def start_exam():
     session["student_id"] = student.id
     session["section_failure_mode"] = "stop"
     start_section(attempt, sections[0])
+    lock_student_access()  # the next student must enter the password again
     return redirect(url_for("exam", section_id=sections[0].id))
 
 
@@ -2477,14 +2687,14 @@ def download_attempt_word(attempt_id):
         word_run(line, str(value), size=10)
     word_paragraph(document, after=4)
 
-    section_widths = scale_widths([2.3, 0.9, 0.8, 0.7, 1.0, 0.9, 1.2], usable)
-    table = word_table(document, ["Section", "Answered", "Correct", "Total", "Percentage", "Pass mark", "Status"], section_widths)
+    section_widths = scale_widths([2.1, 0.8, 0.8, 0.7, 0.9, 1.0, 0.9, 1.2], usable)
+    table = word_table(document, ["Section", "Answered", "Correct", "Total", "Percentage", "Passing marks", "Pass mark", "Status"], section_widths)
     for report in section_reports:
         cells = word_add_row(table, section_widths)
         failed = not report["passed"]
         fill = WORD_FAIL_ROW if failed else WORD_PASS_BG
         text_colour = WORD_FAIL_TEXT if failed else WORD_INK
-        values = [report["title"], report["answered"], report["correct"], report["total"], f"{report['percentage']}%", f"{report['pass_percentage']}%"]
+        values = [report["title"], report["answered"], report["correct"], report["total"], f"{report['percentage']}%", report["passing_marks"], f"{report['pass_percentage']}%"]
         for index, value in enumerate(values):
             word_cell_text(cells[index], value, size=9.5, bold=failed, colour=text_colour, fill=fill)
         if report["timed_out"]:
@@ -2531,7 +2741,7 @@ def download_attempt_word(attempt_id):
 def restart():
     session.pop("attempt_id", None)
     session.pop("student_id", None)
-    session.pop("student_access_unlocked", None)
+    lock_student_access()
     return redirect(url_for("student_login"))
 
 

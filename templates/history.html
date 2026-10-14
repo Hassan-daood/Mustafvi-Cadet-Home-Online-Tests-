@@ -66,6 +66,13 @@
 {% if searched %}
 <section class="card history-results" id="history-results">
   {% if attempt_rows %}
+  {% if report_test_details %}<div class="report-test-details">
+    {% for test_info in report_test_details %}<h3>{{ test_info.title }}</h3>
+    <p>All sections · Total marks: {{ test_info.total_marks }} · Passing marks: {{ test_info.passing_marks }} · Passing percentage: {{ '%.2f'|format(test_info.pass_percentage) }}%</p>
+    <table><thead><tr><th>Section</th><th>Total marks</th><th>Passing marks</th><th>Passing percentage</th></tr></thead><tbody>
+      {% for section_info in test_info.sections %}<tr><td>{{ section_info.title }}</td><td>{{ section_info.total_marks }}</td><td>{{ section_info.passing_marks }}</td><td>{{ '%.2f'|format(section_info.pass_percentage) }}%</td></tr>{% endfor %}
+    </tbody></table>{% endfor %}
+  </div>{% endif %}
   {% if progress_student %}
   {% include 'student_progress_analytics.html' %}
   {% endif %}

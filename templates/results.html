@@ -30,7 +30,7 @@
   <p><strong>Reason:</strong> {{ attempt.stopped_reason or 'Completed' }}</p>
 
   <table>
-    <thead><tr><th>Section</th><th>Answered</th><th>Correct</th><th>Total</th><th>Percentage</th><th>Pass mark</th><th>Status</th></tr></thead>
+    <thead><tr><th>Section</th><th>Answered</th><th>Correct</th><th>Total</th><th>Percentage</th><th>Passing marks</th><th>Pass mark</th><th>Status</th></tr></thead>
     <tbody>
       {% for r in section_reports %}
       <tr class="{{ 'section-result-pass' if r.passed else 'section-result-fail' }}">
@@ -39,6 +39,7 @@
         <td>{{ r.correct }}</td>
         <td>{{ r.total }}</td>
         <td>{{ r.percentage }}%</td>
+        <td>{{ r.passing_marks }}</td>
         <td>{{ r.pass_percentage }}%</td>
         <td class="{{ 'result-cell-pass' if r.passed else 'result-cell-fail' }}">
           {% if r.timed_out %}<span class="result-status expired">TIME EXPIRED</span>{% elif r.passed %}<span class="result-status pass">PASS</span>{% else %}<span class="result-status fail">FAIL</span>{% endif %}
