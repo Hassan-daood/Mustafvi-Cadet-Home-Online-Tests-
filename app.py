@@ -471,39 +471,39 @@ def admin_required(view):
 # database; deleting test history never removes these students.
 CLASS_ROSTER = [
     ("1", "Fahad Majeed", "8th"),
-    ("2", "M. Irfan", "8th"),
+    ("2", "M Irfan", "8th"),
     ("3", "Ali Hassan", "8th"),
     ("4", "Sultan Nabeel", "8th"),
-    ("5", "M. Ali Ahsan", "8th"),
+    ("5", "M Ali Ahsan", "8th"),
     ("6", "Hassan Rizwan", "8th"),
     ("7", "Ali Ahmad", "8th"),
     ("8", "Abdul Qadir", "8th"),
-    ("9", "M. Shahzaib Asad", "8th"),
-    ("10", "M. Uabid Moeen", "8th"),
+    ("9", "M Shahzaib Asad", "8th"),
+    ("10", "M Uabid Moeen", "8th"),
     ("11", "Muazam Ali", "8th"),
     ("12", "Shaheryar Ghuman", "8th"),
-    ("13", "M. Ayaz", "8th"),
+    ("13", "M Ayaz", "8th"),
     ("14", "Eissa Bin Rashid", "8th"),
     ("15", "Murad Abbas", "8th"),
     ("16", "Abdul Raheem", "8th"),
     ("17", "Abdul Hadi (Tariq)", "8th"),
-    ("18", "M. Asad", "8th"),
-    ("19", "M. Huzaifa Fareed", "8th"),
+    ("18", "M Asad", "8th"),
+    ("19", "M Huzaifa Fareed", "8th"),
     ("20", "Zain Raza Atta", "7th"),
     ("21", "Noor Aalam", "7th"),
-    ("22", "M. Mahad Pahat", "7th"),
+    ("22", "M Mahad Pahat", "7th"),
     ("23", "Abdullah Sabir", "7th"),
     ("24", "Abdul Muqeet", "7th"),
     ("25", "Ibrahim Asif", "7th"),
-    ("26", "M. Musa", "7th"),
+    ("26", "M Musa", "7th"),
     ("27", "M. Ali Ayaz (new)", "7th"),
     ("28", "Naeem Akram", "7th"),
     ("29", "Junaid Ali", "7th"),
-    ("30", "M. Fahad Ch.", "7th"),
+    ("30", "M Fahad Ch", "7th"),
     ("31", "Taha Ali", "7th"),
     ("32", "Abubakar", "7th"),
     ("33", "Usman", "7th"),
-    ("34", "M. Zeeshan Mughal", "7th"),
+    ("34", "M Zeeshan Mughal", "7th"),
 ]
 
 
@@ -870,6 +870,7 @@ def build_student_progress_analytics(attempt_rows):
         "chart_width": 760,
         "chart_height": CHART_HEIGHT,
         "chart_mid_y": CHART_HEIGHT // 2,
+        "fail_bands": [],
         "average_percentage": 0,
         "passed_attempts": 0,
         "passed_percentage": 0,
@@ -889,14 +890,30 @@ def build_student_progress_analytics(attempt_rows):
     plot_width = chart_width - plot_left - plot_right
     plot_height = CHART_HEIGHT - plot_top - plot_bottom
     progress_points = []
+    fail_bands = []
     for index, row in enumerate(ordered_rows):
         x = plot_left + (plot_width / 2 if len(ordered_rows) == 1 else index * plot_width / (len(ordered_rows) - 1))
         score = max(0, min(100, row["score"]))
+        pass_percentage = max(0, min(100, row["pass_percentage"]))
+        threshold_y = plot_top + (100 - pass_percentage) * plot_height / 100
+        band_left = plot_left if index == 0 else (progress_points[index - 1]["x"] + x) / 2
+        if index == len(ordered_rows) - 1:
+            band_right = plot_left + plot_width
+        else:
+            next_x = plot_left + (index + 1) * plot_width / (len(ordered_rows) - 1)
+            band_right = (x + next_x) / 2
+        fail_bands.append({
+            "x": round(band_left, 2),
+            "y": round(threshold_y, 2),
+            "width": round(band_right - band_left, 2),
+            "height": round(plot_top + plot_height - threshold_y, 2),
+        })
         attempt_date = to_pkdt(row["attempt"].started_at)
         progress_points.append({
             "x": round(x, 2),
             "y": round(plot_top + (100 - score) * plot_height / 100, 2),
             "score": row["score"],
+            "failed": row["attempt"].status != "in_progress" and row["score"] < row["pass_percentage"],
             "date": attempt_date.strftime("%d %b %Y"),
             "date_label": attempt_date.strftime("%d %b"),
             "attempt_id": row["attempt"].id,
@@ -916,6 +933,7 @@ def build_student_progress_analytics(attempt_rows):
     analytics.update({
         "progress_student": ordered_rows[0]["attempt"].student,
         "progress_points": progress_points,
+        "fail_bands": fail_bands,
         "progress_line": " ".join(f"{point['x']},{point['y']}" for point in progress_points),
         "chart_ticks": chart_percentage_ticks(plot_top, plot_height),
         "chart_width": chart_width,
@@ -1365,6 +1383,39 @@ class ChartCanvas:
         label = label.rotate(90, expand=True)
         self.image.alpha_composite(label, (int(cx * self.s - label.width / 2), int(cy * self.s - label.height / 2)))
 
+    def text_width(self, value, size, bold=False):
+        return chart_font(size * self.s, bold).getlength(str(value)) / self.s
+
+    def fit_text(self, value, size, max_width, bold=False):
+        value = str(value)
+        if self.text_width(value, size, bold) <= max_width:
+            return value
+        while len(value) > 1 and self.text_width(value + "…", size, bold) > max_width:
+            value = value[:-1]
+        return value.rstrip() + "…"
+
+    def gradient_card(self, x0, y0, x1, y1, start, end, border, bar, radius=8):
+        """Rounded card with a soft left-to-right gradient, a thin border and a coloured left edge."""
+        from PIL import Image, ImageDraw
+        s = self.s
+        width, height = int((x1 - x0) * s), int((y1 - y0) * s)
+        mask = Image.linear_gradient("L").rotate(90).resize((width, height))
+        body = Image.composite(
+            Image.new("RGBA", (width, height), f"#{end}"),
+            Image.new("RGBA", (width, height), f"#{start}"),
+            mask,
+        )
+        shape = Image.new("L", (width, height), 0)
+        ImageDraw.Draw(shape).rounded_rectangle([0, 0, width - 1, height - 1], radius=radius * s, fill=255)
+        self.image.paste(body, (int(x0 * s), int(y0 * s)), shape)
+        self.draw.rounded_rectangle(
+            [x0 * s, y0 * s, x1 * s, y1 * s], radius=radius * s, outline=f"#{border}", width=max(int(s), 1),
+        )
+        self.draw.rounded_rectangle(
+            [x0 * s, y0 * s, (x0 + 4) * s, y1 * s], radius=radius * s, fill=f"#{bar}",
+            corners=(True, False, False, True),
+        )
+
     def to_png(self):
         from PIL import Image
         final = self.image.resize((int(self.width * self.scale), int(self.height * self.scale)), Image.LANCZOS)
@@ -1385,12 +1436,24 @@ def draw_percentage_axes(canvas, ox, oy, ticks, width, y_title, y_title_mid):
 def draw_line_chart(canvas, ox, oy, analytics, label_key, x_title, y_title):
     width = analytics["chart_width"]
     height = analytics["chart_height"]
+    for band in analytics.get("fail_bands", []):
+        canvas.rect(
+            ox + band["x"], oy + band["y"],
+            ox + band["x"] + band["width"], oy + band["y"] + band["height"],
+            fill=WORD_FAIL_BG,
+        )
     draw_percentage_axes(canvas, ox, oy, analytics["chart_ticks"], width, y_title, analytics["chart_mid_y"])
     points = analytics["progress_points"]
     if len(points) > 1:
         canvas.line([(ox + p["x"], oy + p["y"]) for p in points], WORD_BRAND, 2.5)
     for point in points:
-        canvas.circle(ox + point["x"], oy + point["y"], 4, fill="FFFFFF", outline=WORD_BRAND, width=2.5)
+        failed = point.get("failed", False)
+        canvas.circle(
+            ox + point["x"], oy + point["y"], 4,
+            fill=WORD_RED if failed else "FFFFFF",
+            outline=WORD_RED if failed else WORD_BRAND,
+            width=2.5,
+        )
         canvas.text(ox + point["x"], oy + height - 30, point[label_key], 12, WORD_MUTED, anchor="ms")
     canvas.text(ox + width / 2, oy + height - 5, x_title, 12, "4B5563", bold=True, anchor="ms")
 
@@ -1430,6 +1493,31 @@ def draw_donut(canvas, ox, oy, value, title, caption):
     canvas.text(centre_x, oy + 152, caption, 10, WORD_MUTED, anchor="ms")
 
 
+SCORE_HIGHLIGHT_HEIGHT = 66
+
+
+def draw_score_highlights(canvas, ox, oy, width, highest, lowest):
+    """Green "highest" and red "lowest" cards side by side (same look as the website)."""
+    gap = 10
+    card_width = (width - gap) / 2
+    cards = (
+        ("Highest score", highest, "F0FDF4", "DCFCE7", "A7F3D0", "059669", "0F766E", "047857"),
+        ("Lowest score", lowest, "FFF7F7", "FEE2E2", "FECACA", "DC2626", "B91C1C", "B91C1C"),
+    )
+    for index, (label, student, start, end, border, bar, label_colour, percent_colour) in enumerate(cards):
+        if not student:
+            continue
+        left = ox + index * (card_width + gap)
+        canvas.gradient_card(left, oy, left + card_width, oy + SCORE_HIGHLIGHT_HEIGHT, start, end, border, bar)
+        text_left = left + 16
+        text_width = card_width - 28
+        canvas.text(text_left, oy + 18, label.upper(), 9.5, label_colour, bold=True)
+        canvas.text(text_left, oy + 35, canvas.fit_text(student["name"], 12.5, text_width, bold=True), 12.5, WORD_INK, bold=True)
+        marks_text = f"{student['marks']} / {student['total_marks']} marks  ·  "
+        canvas.text(text_left, oy + 55, marks_text, 10, "4B5563")
+        canvas.text(text_left + canvas.text_width(marks_text, 10), oy + 56, f"{student['percentage']}%", 15, percent_colour, bold=True)
+
+
 def draw_pass_box(canvas, ox, oy, count_text, label):
     canvas.rect(ox, oy, ox + 150, oy + 46, fill="ECFDF5")
     canvas.rect(ox, oy, ox + 3, oy + 46, fill=WORD_GREEN)
@@ -1437,15 +1525,24 @@ def draw_pass_box(canvas, ox, oy, count_text, label):
     canvas.text(ox + 12, oy + 37, label, 10, "4B5563", bold=True)
 
 
-def render_analytics_panel(chart_title, chart_width, chart_height, draw_chart, donuts, pass_text, pass_label):
-    """One picture holding the chart, the two circular diagrams and the passed/total box."""
+def render_analytics_panel(chart_title, chart_width, chart_height, draw_chart, donuts, pass_text, pass_label, highlights=None):
+    """One picture holding the chart, the two circular diagrams and the passed/total box.
+
+    highlights = (highest, lowest) adds the website's green/red score cards under the chart."""
     pad, gap, donut_width, title_height = 14, 18, 150, 24
+    cards_height = (SCORE_HIGHLIGHT_HEIGHT + 12) if highlights and any(highlights) else 0
     width = pad + chart_width + gap + donut_width + gap + donut_width + pad
-    height = max(pad + title_height + chart_height + pad, pad + 170 + 8 + 46 + pad)
+    height = max(pad + title_height + chart_height + cards_height + pad, pad + 170 + 8 + 46 + pad)
     canvas = ChartCanvas(width, height)
     canvas.rect(0.5, 0.5, width - 0.5, height - 0.5, fill=WORD_SOFT, outline=WORD_BORDER, width=1, radius=10)
     canvas.text(pad, pad + 12, chart_title, 12, "111827", bold=True)
     draw_chart(canvas, pad, pad + title_height)
+    if cards_height:
+        cards_width = min(chart_width - 20, 520)
+        draw_score_highlights(
+            canvas, pad + (chart_width - cards_width) / 2, pad + title_height + chart_height + 12,
+            cards_width, *highlights,
+        )
     first_donut_x = pad + chart_width + gap
     second_donut_x = first_donut_x + donut_width + gap
     draw_donut(canvas, first_donut_x, pad, *donuts[0])
@@ -2101,6 +2198,7 @@ def download_overall_results_word():
                 ],
                 f"{analytics['passed_count']} / {analytics['progress_total_students']}",
                 "Students passed / total",
+                highlights=(analytics.get("top_score_student"), analytics.get("low_score_student")),
             )
         else:
             panel = render_analytics_panel(
@@ -2113,6 +2211,7 @@ def download_overall_results_word():
                 ],
                 f"{analytics['passed_count']} / {analytics['progress_total_students']}",
                 "Students passed / total",
+                highlights=(analytics.get("top_score_student"), analytics.get("low_score_student")),
             )
         word_picture(document, panel, usable)
 
